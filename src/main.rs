@@ -474,7 +474,7 @@ impl App {
         } else {
             widget_next = widget_next.block(
                 Block::bordered()
-                    .title_top(" Library ")
+                    .title_top(" Up Next ")
                     .border_type(BorderType::Thick)
                     .title_alignment(Alignment::Center),
             );
@@ -494,7 +494,7 @@ impl App {
         } else {
             widget_all = widget_all.block(
                 Block::bordered()
-                    .title(" Up Next ")
+                    .title(" Library ")
                     .title_alignment(Alignment::Center),
             );
             frame.render_widget(widget_all, right);

@@ -61,7 +61,7 @@ pub fn handle_events(app: &mut App) -> Message {
             KeyCode::Backspace => {
                 if let NavState::UpNext(table_state) = &app.nav_state {
                     if let Some(selected) = table_state.selected() {
-                        return Message::DeleteNextUp(selected);
+                        return Message::DeleteNextUp(selected + 1);
                     }
                 }
             }
