@@ -130,8 +130,11 @@ impl App {
                 return Ok(());
             }
             Message::Pause(paused) => {
-                MpvCommand::TogglePause.run()?;
-                self.paused = paused;
+                if let Err(e) = MpvCommand::TogglePause.run() {
+                    //TODO: handle MPV error through feedback system
+                } else {
+                    self.paused = paused;
+                }
             }
             Message::SongNext => {
                 self.songs.kill_current();
@@ -157,8 +160,10 @@ impl App {
                 self.songs.remove_next_up(selected);
             }
             Message::PlayAll => {
-                self.songs
-                    .push_songs_back(0..self.songs.songs_in_library() - 1);
+                if self.songs.songs_library.len() > 0 {
+                    self.songs
+                        .push_songs_back(0..self.songs.songs_in_library() - 1);
+                }
                 self.songs.shuffle();
             }
             Message::ReloadConfig => {
