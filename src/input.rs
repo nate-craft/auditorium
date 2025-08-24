@@ -70,16 +70,16 @@ pub fn handle_events(app: &mut App) -> Message {
             }
             KeyCode::Char('j') | KeyCode::PageDown | KeyCode::Down => {
                 let elements = match app.nav_state {
-                    NavState::UpNext(_) => app.songs.songs_next.len(),
-                    NavState::Library(_) => app.songs.songs_library.len(),
+                    NavState::UpNext(_) => app.songs.songs_in_next_up(),
+                    NavState::Library(_) => app.songs.songs_in_library(),
                     _ => 0,
                 };
                 return Message::NavStateInnerNext(code != KeyCode::PageDown, elements);
             }
             KeyCode::Char('k') | KeyCode::PageUp | KeyCode::Up => {
                 let elements = match app.nav_state {
-                    NavState::UpNext(_) => app.songs.songs_next.len(),
-                    NavState::Library(_) => app.songs.songs_library.len(),
+                    NavState::UpNext(_) => app.songs.songs_in_next_up(),
+                    NavState::Library(_) => app.songs.songs_in_library(),
                     _ => 0,
                 };
                 return Message::NavStateInnerPrev(code != KeyCode::PageUp, elements);
