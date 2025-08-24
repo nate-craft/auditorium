@@ -1,4 +1,4 @@
-use color_eyre::Result;
+use color_eyre::{eyre::Error, Result};
 use crossterm::ExecutableCommand;
 use ffprobe::FfProbeError;
 use random_number::rand::{seq::SliceRandom, thread_rng};
@@ -6,17 +6,22 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Position, Rect},
     style::{Color, Style, Stylize},
     widgets::{Block, BorderType, Borders, TableState},
-    DefaultTerminal, Frame,
+    Frame,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::{max, min},
     fs::File,
-    io::{BufReader, Write},
+    io::{self, BufReader, Write},
+    ops::Range,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::mpsc::{self, Sender},
+    sync::{
+        mpsc::{self, Sender},
+        Arc, Mutex,
+    },
     thread::{self, JoinHandle},
+    time::Duration,
 };
 
 use crate::{
@@ -176,7 +181,7 @@ impl Song {
         });
     }
 
-    fn play_single(&self) -> Result<Child, std::io::Error> {
+    fn play_single(&self) -> Result<Child, io::Error> {
         Command::new("mpv")
             .arg("--no-video")
             .arg("--no-resume-playback")
@@ -232,7 +237,6 @@ impl Songs {
         songs
             .songs_library
             .sort_by(|first, second| first.artist.cmp(&second.artist));
-        // songs.songs_library.shuffle(&mut thread_rng());
 
         songs
     }
@@ -368,6 +372,22 @@ impl Songs {
             .map(|index| self.songs_library.get(index))
             .flatten()
     }
+
+    fn push_songs_back(&mut self, song_indicies: Range<usize>) {
+        self.songs_next.extend(song_indicies.into_iter());
+    }
+
+    fn shuffle(&mut self) {
+        self.songs_next.shuffle(&mut thread_rng());
+    }
+
+    fn push_song_back(&mut self, selected: usize) {
+        self.songs_next.push(selected);
+    }
+
+    fn push_song_front(&mut self, selected: usize) {
+        self.songs_next.insert(1, selected);
+    }
 }
 
 impl App {
@@ -381,15 +401,13 @@ impl App {
         }
     }
 
-    fn run(&mut self, terminal: &mut DefaultTerminal, tick: &u64) -> Result<()> {
-        //TODO: draw on separate thread and add actual time based ticks
-        if tick % 10000 == 0 {
-            terminal.draw(|frame| self.draw(frame))?;
-        }
-
+    fn handle_events(&mut self) -> Result<()> {
         match input::handle_events(self) {
             Message::None => {}
-            Message::Exit => self.exit(),
+            Message::Exit => {
+                self.exit();
+                return Ok(());
+            }
             Message::Pause(paused) => {
                 MpvCommand::TogglePause.run()?;
                 self.paused = paused;
@@ -418,9 +436,9 @@ impl App {
                 self.songs.songs_next.remove(selected);
             }
             Message::PlayAll => {
-                for i in 0..self.songs.songs_library.len() - 1 {
-                    self.songs.songs_next.push(i);
-                }
+                self.songs
+                    .push_songs_back(0..self.songs.songs_library.len() - 1);
+                self.songs.shuffle();
             }
             Message::MoveSong => match &self.nav_state {
                 NavState::UpNext(table_state) => {
@@ -432,20 +450,24 @@ impl App {
                             .map(|library_index| *library_index)
                             .map(|library_index| {
                                 self.songs.songs_next.remove(selected);
-                                self.songs.songs_next.insert(1, library_index);
+                                self.songs.push_song_front(library_index);
                                 self.songs.kill_current();
                             });
                     });
                 }
                 NavState::Library(table_state) => {
                     if let Some(selected) = table_state.selected() {
-                        self.songs.songs_next.push(selected);
+                        self.songs.push_song_back(selected);
                     };
                 }
                 _ => {}
             },
         }
 
+        return Ok(());
+    }
+
+    fn handle_song_state(&mut self) -> Result<()> {
         match self.songs.active.as_mut() {
             None => {
                 match self.song_state {
@@ -468,22 +490,20 @@ impl App {
                 self.song_state = SongLoadingState::Forward;
             }
             Some(active) => {
-                if let Ok(status) = active.try_wait() {
-                    if status.is_some() {
-                        self.songs.next(&self.song_state);
-                        self.song_state = SongLoadingState::Forward;
-                        self.paused = false;
-                        self.songs.active = self
-                            .songs
-                            .current_song()
-                            .map(|process| process.play_single().unwrap());
-                    }
-                    //TODO: handle error on running
+                let status = active.try_wait()?;
+                if status.is_some() {
+                    self.songs.next(&self.song_state);
+                    self.song_state = SongLoadingState::Forward;
+                    self.paused = false;
+                    self.songs.active = self
+                        .songs
+                        .current_song()
+                        .map(|process| process.play_single().unwrap());
                 }
             }
         }
 
-        Ok(())
+        return Ok(());
     }
 
     fn draw(&mut self, frame: &mut Frame) {
@@ -561,6 +581,7 @@ impl App {
 
     fn exit(&mut self) {
         self.set_nav_state(NavState::Exit);
+        self.songs.kill_current();
     }
 
     fn set_click_position(&mut self, position: Position) {
@@ -615,30 +636,72 @@ impl App {
 }
 
 fn main() -> Result<()> {
+    color_eyre::install()?;
+
     let music_dir_path = PathBuf::from(MUSIC_DIR);
     let cache_path = Path::new(CACHE_FILE);
     let songs = Songs::new(cache_path, music_dir_path);
-
-    let mut app = App::new(songs);
-
-    color_eyre::install()?;
+    let app = Arc::new(Mutex::new(App::new(songs)));
     let mut terminal = ratatui::init();
-    let mut result = Ok(());
 
-    std::io::stdout()
-        .execute(crossterm::event::EnableMouseCapture)
-        .unwrap();
+    io::stdout().execute(crossterm::event::EnableMouseCapture)?;
+    terminal.clear().unwrap();
 
-    let mut ticks: u64 = 0;
-    while app.nav_state != NavState::Exit {
-        result = app.run(&mut terminal, &ticks);
-        ticks += 1;
-        //TODO: handle errors here or send to UI for next draw loop?
+    let app_ref = app.clone();
+    let handle_draw: JoinHandle<Result<()>> = thread::spawn(move || loop {
+        let Ok(mut app) = app_ref.try_lock() else {
+            continue;
+        };
+
+        if app.nav_state == NavState::Exit {
+            return Ok(());
+        }
+
+        if let Err(err) = terminal
+            .draw(|frame| app.draw(frame))
+            .map_err(|err| Error::new(err))
+        {
+            app.exit();
+            return Err(err);
+        }
+
+        thread::sleep(Duration::from_millis(20));
+    });
+
+    let app_ref = app.clone();
+    let handle: JoinHandle<Result<()>> = thread::spawn(move || loop {
+        let Ok(mut app) = app_ref.try_lock() else {
+            continue;
+        };
+
+        if app.nav_state == NavState::Exit {
+            return Ok(());
+        }
+
+        if let Err(err) = app.handle_events() {
+            app.exit();
+            return Err(err);
+        }
+
+        if let Err(err) = app.handle_song_state() {
+            app.exit();
+            return Err(err);
+        }
+
+        thread::sleep(Duration::from_millis(5));
+    });
+
+    loop {
+        if handle.is_finished() {
+            ratatui::restore();
+            return handle.join().unwrap();
+        }
+
+        if handle_draw.is_finished() {
+            ratatui::restore();
+            return handle_draw.join().unwrap();
+        }
+
+        thread::sleep(Duration::from_millis(200));
     }
-
-    ratatui::restore();
-
-    app.songs.kill_current();
-
-    result
 }

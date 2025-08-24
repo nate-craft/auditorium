@@ -7,7 +7,9 @@
 - [x] Add/delete to/from queue
 - [x] Large refactor
 - [x] README
-- [ ] Add concurrency to initial ffprobe to increase speeds
+- [x] Add concurrency to initial ffprobe to increase speeds
+- [x] Move drawing to a different thread to allow for frame rate regulation
+- [ ] Add clap to allow for `-d|--dir` flag to pick music directory
 - [ ] Add configuration for color theming (need XDG standard crate)
 - [ ] Multiple authors loading from initial ffprobe parsing
 - [ ] Error pop up (possibly incorporated into border)

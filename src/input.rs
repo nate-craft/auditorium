@@ -34,7 +34,7 @@ pub fn handle_events(app: &mut App) -> Message {
     }) = event
     {
         match code {
-            KeyCode::Char('q') | KeyCode::Esc => app.exit(),
+            KeyCode::Char('q') | KeyCode::Esc => return Message::Exit,
             KeyCode::Char('c') | KeyCode::Char('d') => {
                 if modifiers.eq(&KeyModifiers::CONTROL) {
                     return Message::Exit;
