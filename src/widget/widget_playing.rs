@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, BorderType, Paragraph},
 };
 
-use crate::mpv::MpvCommandFeedback;
+use crate::{mpv::MpvCommandFeedback, SECONDARY_COLOR};
 use crate::{App, MpvCommand, NavState};
 
 pub fn widget_playing<'a>(app: &mut App) -> Paragraph<'a> {
@@ -50,7 +50,7 @@ pub fn widget_playing<'a>(app: &mut App) -> Paragraph<'a> {
     if app.nav_state == NavState::Player {
         widget_playing = widget_playing.block(
             Block::bordered()
-                .border_style(Style::new().fg(Color::Yellow))
+                .border_style(Style::new().fg(SECONDARY_COLOR))
                 .border_type(BorderType::Thick)
                 .title(player_title)
                 .title_bottom("| [Space] Play | [</>] Prev/Next |")

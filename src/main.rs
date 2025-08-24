@@ -1,5 +1,6 @@
 use color_eyre::Result;
 use crossterm::ExecutableCommand;
+use ffprobe::FfProbeError;
 use random_number::rand::{seq::SliceRandom, thread_rng};
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Position, Rect},
@@ -14,6 +15,8 @@ use std::{
     io::{BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    sync::mpsc::{self, Sender},
+    thread::{self, JoinHandle},
 };
 
 use crate::{
@@ -29,6 +32,7 @@ mod widget;
 const MUSIC_DIR: &'static str = "/home/nate/Music/";
 const CACHE_FILE: &'static str = "/home/nate/.cache/music-player-cache.json";
 const MPV_SOCKET: &'static str = "/tmp/mpv-socket";
+const SECONDARY_COLOR: Color = Color::Rgb(238, 149, 158);
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Song {
@@ -139,43 +143,37 @@ impl NavState {
 }
 
 impl Song {
-    fn new(file_name: &Path) -> Option<Song> {
-        match ffprobe::ffprobe(&file_name) {
-            Ok(probe) => {
-                let mut title: String = "Unknown".to_owned();
-                let mut genre: String = "Unknown".to_owned();
-                let mut artist: String = "Unknown".to_owned();
-                let path = file_name.to_owned();
+    fn new(file_name: &Path) -> Result<Song, FfProbeError> {
+        let probe = ffprobe::ffprobe(&file_name)?;
+        let mut title: String = "Unknown".to_owned();
+        let mut genre: String = "Unknown".to_owned();
+        let mut artist: String = "Unknown".to_owned();
+        let path = file_name.to_owned();
 
-                probe.format.tags.map(|tags| {
-                    tags.extra.get("title").map(|title_inner| {
-                        title_inner.as_str().map(|title_inner| {
-                            title = title_inner.to_owned();
-                        });
-                    });
-                    tags.extra.get("genre").map(|genre_inner| {
-                        genre_inner.as_str().map(|genre_inner| {
-                            genre = genre_inner.to_owned();
-                        });
-                    });
-                    tags.extra.get("artist").map(|artist_inner| {
-                        artist_inner.as_str().map(|author_inner| {
-                            artist = author_inner.to_owned();
-                        });
-                    })
+        probe.format.tags.map(|tags| {
+            tags.extra.get("title").map(|title_inner| {
+                title_inner.as_str().map(|title_inner| {
+                    title = title_inner.to_owned();
                 });
-                return Some(Song {
-                    title,
-                    genre,
-                    artist,
-                    path,
+            });
+            tags.extra.get("genre").map(|genre_inner| {
+                genre_inner.as_str().map(|genre_inner| {
+                    genre = genre_inner.to_owned();
                 });
-            }
-            Err(e) => {
-                eprintln!("{}", e);
-                return None;
-            }
-        }
+            });
+            tags.extra.get("artist").map(|artist_inner| {
+                artist_inner.as_str().map(|author_inner| {
+                    artist = author_inner.to_owned();
+                });
+            })
+        });
+
+        return Ok(Song {
+            title,
+            genre,
+            artist,
+            path,
+        });
     }
 
     fn play_single(&self) -> Result<Child, std::io::Error> {
@@ -219,22 +217,83 @@ impl Songs {
                 "{}",
                 "Loading music from Music directory. This may take a moment...".green()
             );
-            songs.add_from_dir(&music_path);
+
+            if let Some(errors) = songs.load_songs(&music_path) {
+                errors.iter().for_each(|e| eprintln!("{}", e));
+            }
+
+            if let Ok(json) = serde_json::to_string(&songs.songs_library) {
+                if let Ok(mut cache_file) = File::create_new(cache_path) {
+                    cache_file.write_all(json.as_bytes()).unwrap();
+                }
+            }
         }
+
+        songs
+            .songs_library
+            .sort_by(|first, second| first.artist.cmp(&second.artist));
+        // songs.songs_library.shuffle(&mut thread_rng());
 
         songs
     }
 
-    fn add_from_dir(&mut self, dir: &Path) {
-        if let Ok(child) = dir.read_dir() {
-            child.for_each(|child_result| {
-                if let Ok(child) = child_result {
-                    let child_path = child.path();
-                    if child_path.is_dir() {
-                        self.add_from_dir(&child_path);
-                    } else if let Some(song) = Song::new(&child_path) {
+    fn load_songs(&mut self, root_dir: &Path) -> Option<Vec<FfProbeError>> {
+        let (send, rec) = mpsc::channel::<Result<Song, FfProbeError>>();
+        let (send_threads, rec_threads) = mpsc::channel::<JoinHandle<()>>();
+        let mut errors = Vec::new();
+        let mut num_started = 0;
+        let mut num_ended = 0;
+        Self::add_from_dir(send.clone(), send_threads.clone(), root_dir);
+
+        loop {
+            while let Ok(result) = rec.try_recv() {
+                match result {
+                    Ok(song) => {
                         self.songs_library.push(song);
                     }
+                    Err(e) => {
+                        errors.push(e);
+                    }
+                }
+                num_ended += 1;
+            }
+
+            while let Ok(_) = rec_threads.try_recv() {
+                num_started += 1;
+            }
+
+            if num_ended >= num_started {
+                if errors.is_empty() {
+                    return None;
+                } else {
+                    return Some(errors);
+                }
+            }
+        }
+    }
+
+    fn add_from_dir(
+        send: Sender<Result<Song, FfProbeError>>,
+        send_threads: Sender<JoinHandle<()>>,
+        dir: &Path,
+    ) {
+        if let Ok(child) = dir.read_dir() {
+            child.for_each(|child_result| {
+                let Ok(child) = child_result else {
+                    return;
+                };
+
+                let child_path = child.path();
+                if child_path.is_dir() {
+                    Self::add_from_dir(send.clone(), send_threads.clone(), &child_path);
+                } else {
+                    let send_clone = send.clone();
+                    send_threads
+                        .send(thread::spawn(move || match Song::new(&child_path) {
+                            Ok(song) => send_clone.clone().send(Ok(song)).unwrap(),
+                            Err(e) => send_clone.clone().send(Err(e)).unwrap(),
+                        }))
+                        .unwrap();
                 }
             });
         }
@@ -464,7 +523,7 @@ impl App {
         if let NavState::UpNext(state) = &mut self.nav_state {
             widget_next = widget_next.block(
                 Block::bordered()
-                    .border_style(Style::new().fg(Color::Yellow))
+                    .border_style(Style::new().fg(SECONDARY_COLOR))
                     .border_type(BorderType::Thick)
                     .title_top(" Up Next ")
                     .title_bottom(" | [j/k] Up/Down | [Enter] Play Now | [Backspace] Remove | ")
@@ -483,7 +542,7 @@ impl App {
         if let NavState::Library(state) = &mut self.nav_state {
             widget_all = widget_all.block(
                 Block::bordered()
-                    .border_style(Style::new().fg(Color::Yellow))
+                    .border_style(Style::new().fg(SECONDARY_COLOR))
                     .title(" Library ")
                     .border_type(BorderType::Thick)
                     .title_bottom(" | [j/k] Up/Down | [Enter] Play Later | [a] Play All | ")
@@ -560,19 +619,7 @@ fn main() -> Result<()> {
     let cache_path = Path::new(CACHE_FILE);
     let songs = Songs::new(cache_path, music_dir_path);
 
-    if !cache_path.exists() {
-        if let Ok(json) = serde_json::to_string(&songs.songs_library) {
-            if let Ok(mut cache_file) = File::create_new(cache_path) {
-                cache_file.write_all(json.as_bytes()).unwrap();
-            }
-        }
-    }
-
     let mut app = App::new(songs);
-    app.songs.songs_library.shuffle(&mut thread_rng());
-    // for i in 0..app.songs.songs_all.len() - 1 {
-    // app.songs.songs_playing.push(i);
-    // }
 
     color_eyre::install()?;
     let mut terminal = ratatui::init();

@@ -7,7 +7,7 @@ use ratatui::{
 };
 use textwrap::Options;
 
-use crate::App;
+use crate::{App, SECONDARY_COLOR};
 
 pub fn build<'a>(app: &App, area: Rect) -> Table<'a> {
     let left_percent = 0.66;
@@ -62,5 +62,5 @@ pub fn build<'a>(app: &App, area: Rect) -> Table<'a> {
                 .green()
                 .bottom_margin(1),
         )
-        .row_highlight_style(Style::new().bg(Color::Yellow).fg(Color::Black))
+        .row_highlight_style(Style::new().bg(SECONDARY_COLOR).fg(Color::Black))
 }

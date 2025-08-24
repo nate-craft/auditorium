@@ -6,7 +6,9 @@
 - [x] All music right side
 - [x] Add/delete to/from queue
 - [x] Large refactor
-- [ ] README
+- [x] README
+- [ ] Add concurrency to initial ffprobe to increase speeds
+- [ ] Add configuration for color theming (need XDG standard crate)
 - [ ] Multiple authors loading from initial ffprobe parsing
 - [ ] Error pop up (possibly incorporated into border)
 - [ ] Fzf searching in a given pane (search box top right, 3 line constraint)
