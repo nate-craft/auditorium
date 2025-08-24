@@ -475,7 +475,6 @@ impl App {
             widget_next = widget_next.block(
                 Block::bordered()
                     .title_top(" Up Next ")
-                    .border_type(BorderType::Thick)
                     .title_alignment(Alignment::Center),
             );
             frame.render_widget(widget_next, left_middle);
