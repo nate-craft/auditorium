@@ -35,7 +35,7 @@ Auditorium can be installed via [cargo](https://doc.rust-lang.org/cargo/getting-
 cargo install --git https://github.com/nate-craft/auditorium
 ```
 
-Auditorium requires [mpv](https://github.com/mpv-player/mpv) to be installed.
+Auditorium requires [mpv](https://mpv.io/) and [ffmpeg](https://ffmpeg.org/index.html?) to be installed.
 
 ___
 
