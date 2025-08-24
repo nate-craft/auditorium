@@ -42,6 +42,7 @@ pub fn handle_events(app: &mut App) -> Message {
                     return Message::Exit;
                 }
             }
+            KeyCode::Char('R') => return Message::ReloadConfig,
             KeyCode::Enter => {
                 return Message::MoveSong;
             }

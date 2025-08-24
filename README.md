@@ -20,11 +20,15 @@ Music Player is a cross-platform, local, simple, fast, and distraction free CLI 
 
 - Simple "Play All" key to shuffle all local music
 
+- Theming support with a hot-reloadable configuration
+
 - Never requires leaving the terminal or using the mouse (although mouse support is built-in!)
 
 - Uses minimal resources (under 1 Mb memory)
 
 ___
+
+## Installation
 
 Auditorium can be installed via [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
 ```bash
@@ -32,3 +36,22 @@ cargo install --git https://github.com/nate-craft/auditorium
 ```
 
 Auditorium requires [mpv](https://github.com/mpv-player/mpv) to be installed.
+
+___
+
+## Configuration
+
+Auditorium's configuration can be found at `$XDG_CONFIG_HOME/auditorium/config.toml`.
+It can be reloaded at any time with `Shift+R`
+
+### Color Formatting
+
+Color configuration values can be in the following formats:
+```hocon
+# Common Names
+"color-example": "White"
+# Hex
+"color-example": "#FFFFFF"
+# Indexed
+"color-example": "0"
+```

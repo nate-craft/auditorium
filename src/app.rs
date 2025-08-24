@@ -8,11 +8,11 @@ use ratatui::{
 use std::cmp::{max, min};
 
 use crate::{
+    files::Config,
     input,
     mpv::MpvCommand,
     songs::Songs,
     widget::{widget_all, widget_history, widget_playing, widget_up_next},
-    COLOR_BORDER,
 };
 
 #[derive(PartialEq, Eq)]
@@ -32,6 +32,7 @@ pub enum SongLoadingState {
 pub struct App {
     pub songs: Songs,
     pub paused: bool,
+    pub config: Config,
     pub nav_state: NavState,
     pub song_state: SongLoadingState,
     pub click_position: Option<Position>,
@@ -50,6 +51,7 @@ pub enum Message {
     MoveSong,
     DeleteNextUp(usize),
     PlayAll,
+    ReloadConfig,
 }
 
 impl NavState {
@@ -109,11 +111,12 @@ impl NavState {
 }
 
 impl App {
-    pub fn new(songs: Songs) -> App {
+    pub fn new(songs: Songs, config: Config) -> App {
         App {
             songs,
             nav_state: NavState::Player,
             song_state: SongLoadingState::Forward,
+            config,
             paused: false,
             click_position: None,
         }
@@ -157,6 +160,9 @@ impl App {
                 self.songs
                     .push_songs_back(0..self.songs.songs_in_library() - 1);
                 self.songs.shuffle();
+            }
+            Message::ReloadConfig => {
+                self.config.reload()?;
             }
             Message::MoveSong => match &self.nav_state {
                 NavState::UpNext(table_state) => {
@@ -246,7 +252,7 @@ impl App {
         if let NavState::UpNext(state) = &mut self.nav_state {
             widget_next = widget_next.block(
                 Block::bordered()
-                    .border_style(Style::new().fg(COLOR_BORDER))
+                    .border_style(Style::new().fg(self.config.color_border))
                     .border_type(BorderType::Thick)
                     .title_top(" Up Next ")
                     .title_bottom(" | [j/k] Up/Down | [Enter] Play Now | [Backspace] Remove | ")
@@ -265,7 +271,7 @@ impl App {
         if let NavState::Library(state) = &mut self.nav_state {
             widget_all = widget_all.block(
                 Block::bordered()
-                    .border_style(Style::new().fg(COLOR_BORDER))
+                    .border_style(Style::new().fg(self.config.color_border))
                     .title(" Library ")
                     .border_type(BorderType::Thick)
                     .title_bottom(" | [j/k] Up/Down | [Enter] Play Later | [a] Play All | ")

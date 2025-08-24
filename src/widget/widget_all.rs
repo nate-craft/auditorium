@@ -7,7 +7,7 @@ use ratatui::{
 };
 use textwrap::Options;
 
-use crate::{App, COLOR_BORDER, COLOR_HEADERS};
+use crate::app::App;
 
 pub fn build<'a>(app: &App, area: Rect) -> Table<'a> {
     let left_percent = 0.66;
@@ -44,7 +44,7 @@ pub fn build<'a>(app: &App, area: Rect) -> Table<'a> {
                     Cell::new(artist_lines_str),
                 ])
                 .height(max(title_lines.len(), artist_lines.len()) as u16)
-                .fg(Color::Indexed(246))
+                .fg(app.config.color_row)
             } else {
                 Row::new(vec![
                     Cell::new(title_lines_str),
@@ -59,8 +59,8 @@ pub fn build<'a>(app: &App, area: Rect) -> Table<'a> {
         .header(
             Row::new(vec![Cell::new("Title"), Cell::new("Artist")])
                 .bold()
-                .style(Style::default().fg(COLOR_HEADERS))
+                .style(Style::default().fg(app.config.color_headers))
                 .bottom_margin(1),
         )
-        .row_highlight_style(Style::new().bg(COLOR_BORDER).fg(Color::Black))
+        .row_highlight_style(Style::new().bg(app.config.color_border).fg(Color::Black))
 }

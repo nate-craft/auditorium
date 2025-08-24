@@ -1,9 +1,7 @@
 use color_eyre::{eyre::Error, Result};
 use crossterm::ExecutableCommand;
-use ratatui::style::Color;
 use std::{
     io::{self},
-    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
     time::Duration,
@@ -11,29 +9,27 @@ use std::{
 
 use crate::{
     app::{App, NavState},
+    files::Config,
     songs::Songs,
 };
 
 mod app;
+mod files;
 mod input;
 mod mpv;
 mod songs;
 mod utilities;
 mod widget;
 
-const MUSIC_DIR: &'static str = "/home/nate/Music/";
-const CACHE_FILE: &'static str = "/home/nate/.cache/music-player-cache.json";
 const MPV_SOCKET: &'static str = "/tmp/mpv-socket";
-const COLOR_BORDER: Color = Color::Yellow;
-const COLOR_HEADERS: Color = Color::Green;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    let music_dir_path = PathBuf::from(MUSIC_DIR);
-    let cache_path = Path::new(CACHE_FILE);
-    let songs = Songs::new(cache_path, music_dir_path);
-    let app = Arc::new(Mutex::new(App::new(songs)));
+    let config = Config::new()?;
+    let cache_path = files::cache_path()?;
+    let songs = Songs::new(&config, &cache_path);
+    let app = Arc::new(Mutex::new(App::new(songs, config)));
     let mut terminal = ratatui::init();
 
     io::stdout().execute(crossterm::event::EnableMouseCapture)?;

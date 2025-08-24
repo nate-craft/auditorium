@@ -13,8 +13,8 @@ use random_number::rand::{self, seq::SliceRandom};
 use ratatui::crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 
-use crate::app::SongLoadingState;
-use crate::{COLOR_HEADERS, MPV_SOCKET};
+use crate::MPV_SOCKET;
+use crate::{app::SongLoadingState, files::Config};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Song {
@@ -81,7 +81,7 @@ impl Song {
 }
 
 impl Songs {
-    pub fn new(cache_path: &Path, music_path: PathBuf) -> Songs {
+    pub fn new(config: &Config, cache_path: &Path) -> Songs {
         let mut song_map = Vec::new();
 
         if cache_path.exists() {
@@ -106,10 +106,10 @@ impl Songs {
                 "{}",
                 "Loading music from Music directory. This may take a moment..."
                     .stylize()
-                    .with(COLOR_HEADERS.into())
+                    .with(config.color_border.into())
             );
 
-            if let Some(errors) = songs.load_songs(&music_path) {
+            if let Some(errors) = songs.load_songs(&config.music_directory) {
                 errors.iter().for_each(|e| eprintln!("{}", e));
             }
 
