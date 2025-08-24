@@ -49,13 +49,19 @@ pub fn widget_playing<'a>(app: &mut App) -> Paragraph<'a> {
         }
     };
 
+    let title_player = if app.paused {
+        "| [Space] Play | [</>] Prev/Next |"
+    } else {
+        "| [Space] Pause | [</>] Prev/Next |"
+    };
+
     if app.nav_state == NavState::Player {
         widget_playing = widget_playing.block(
             Block::bordered()
                 .border_style(Style::new().fg(app.config.color_border))
                 .border_type(BorderType::Thick)
                 .title(player_title)
-                .title_bottom("| [Space] Play | [</>] Prev/Next |")
+                .title_bottom(title_player)
                 .title_alignment(Alignment::Center),
         );
     } else {

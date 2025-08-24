@@ -130,7 +130,7 @@ impl App {
                 return Ok(());
             }
             Message::Pause(paused) => {
-                if let Err(e) = MpvCommand::TogglePause.run() {
+                if let Err(_) = MpvCommand::TogglePause.run() {
                     //TODO: handle MPV error through feedback system
                 } else {
                     self.paused = paused;
