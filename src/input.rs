@@ -6,7 +6,9 @@ use crossterm::event::{
 };
 use ratatui::layout::Position;
 
-use crate::{App, Message, NavState};
+use crate::app::App;
+use crate::app::Message;
+use crate::app::NavState;
 
 pub fn handle_events(app: &mut App) -> Message {
     let event;

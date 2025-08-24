@@ -1,27 +1,29 @@
 use ratatui::{
     layout::Alignment,
-    style::{Style, Stylize},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, BorderType, Paragraph},
 };
 
-use crate::{mpv::MpvCommandFeedback, SECONDARY_COLOR};
-use crate::{App, MpvCommand, NavState};
+use crate::mpv::MpvCommand;
+use crate::App;
+use crate::NavState;
+use crate::{mpv::MpvCommandFeedback, COLOR_BORDER, COLOR_HEADERS};
 
 pub fn widget_playing<'a>(app: &mut App) -> Paragraph<'a> {
     let mut widget_playing = {
         if let Some(playing) = app.songs.current_song() {
             Paragraph::new(vec![
                 Line::from(vec![
-                    Span::styled("Track: ", Style::default().green()),
+                    Span::styled("Track: ", Style::default().fg(COLOR_HEADERS)),
                     Span::raw(playing.title.to_owned()),
                 ]),
                 Line::from(vec![
-                    Span::styled("Artist: ", Style::default().green()),
+                    Span::styled("Artist: ", Style::default().fg(COLOR_HEADERS)),
                     Span::raw(playing.artist.to_owned()),
                 ]),
                 Line::from(vec![
-                    Span::styled("Genre: ", Style::default().green()),
+                    Span::styled("Genre: ", Style::default().fg(COLOR_HEADERS)),
                     Span::raw(playing.genre.to_owned()),
                 ]),
             ])
@@ -50,7 +52,7 @@ pub fn widget_playing<'a>(app: &mut App) -> Paragraph<'a> {
     if app.nav_state == NavState::Player {
         widget_playing = widget_playing.block(
             Block::bordered()
-                .border_style(Style::new().fg(SECONDARY_COLOR))
+                .border_style(Style::new().fg(COLOR_BORDER))
                 .border_type(BorderType::Thick)
                 .title(player_title)
                 .title_bottom("| [Space] Play | [</>] Prev/Next |")

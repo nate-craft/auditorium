@@ -13,7 +13,8 @@ use random_number::rand::{self, seq::SliceRandom};
 use ratatui::crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 
-use crate::{SongLoadingState, MPV_SOCKET};
+use crate::app::SongLoadingState;
+use crate::{COLOR_HEADERS, MPV_SOCKET};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Song {
@@ -103,7 +104,9 @@ impl Songs {
         if songs.songs_library.is_empty() {
             println!(
                 "{}",
-                "Loading music from Music directory. This may take a moment...".green()
+                "Loading music from Music directory. This may take a moment..."
+                    .stylize()
+                    .with(COLOR_HEADERS.into())
             );
 
             if let Some(errors) = songs.load_songs(&music_path) {
