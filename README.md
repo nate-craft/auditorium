@@ -1,8 +1,8 @@
-# Music Player
+# Auditorium
 
 ![](https://gist.githubusercontent.com/nate-craft/648bbda6337b503a5d703f86757e4647/raw/144cf1f5f80e9c5ac6b5efde45869d01feb2ccd9/brainmade.png)
 
-Music Player is a cross-platform, local, simple, fast, and distraction free CLI application to listen to your music library
+Auditorium is a cross-platform, local, simple, fast, and distraction free CLI application to listen to your music library
 
 ![Preview](assets/preview.png)
 
