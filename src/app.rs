@@ -1,8 +1,8 @@
 use color_eyre::Result;
 use ratatui::{
-    layout::{Alignment, Constraint, Layout, Position, Rect},
+    layout::{Alignment, Constraint, Flex, Layout, Position, Rect},
     style::{Style, Stylize},
-    widgets::{Block, BorderType, Borders, TableState},
+    widgets::{Block, BorderType, Borders, Clear, TableState},
     Frame,
 };
 use std::cmp::{max, min};
@@ -12,7 +12,7 @@ use crate::{
     input,
     mpv::MpvCommand,
     songs::Songs,
-    widget::{widget_all, widget_history, widget_playing, widget_up_next},
+    widget::{widget_all, widget_history, widget_playing, widget_popup, widget_up_next},
 };
 
 #[derive(PartialEq, Eq)]
@@ -36,6 +36,7 @@ pub struct App {
     pub nav_state: NavState,
     pub song_state: SongLoadingState,
     pub click_position: Option<Position>,
+    pub alert: Option<String>,
 }
 
 pub enum Message {
@@ -53,6 +54,7 @@ pub enum Message {
     PlayAll,
     ReloadConfig,
     ReloadMusic,
+    ClearError,
 }
 
 impl NavState {
@@ -120,6 +122,7 @@ impl App {
             config,
             paused: false,
             click_position: None,
+            alert: None,
         }
     }
 
@@ -130,9 +133,10 @@ impl App {
                 self.exit();
                 return Ok(());
             }
+            Message::ClearError => self.alert = None,
             Message::Pause(paused) => {
                 if let Err(_) = MpvCommand::TogglePause.run() {
-                    //TODO: handle MPV error through feedback system
+                    self.alert = Some("Error querying MPV for pause information".to_owned());
                 } else {
                     self.paused = paused;
                 }
@@ -173,6 +177,10 @@ impl App {
             Message::ReloadMusic => {
                 self.songs.reload(&self.config)?;
                 self.set_nav_state(self.nav_state.as_stateful_default(self));
+                self.alert = Some(format!(
+                    "New music library loaded from {}",
+                    self.config.music_directory.to_string_lossy()
+                ));
             }
             Message::MoveSong => match &self.nav_state {
                 NavState::UpNext(table_state) => {
@@ -295,6 +303,17 @@ impl App {
                     .title_alignment(Alignment::Center),
             );
             frame.render_widget(widget_all, right);
+        }
+
+        if let Some(alert) = &self.alert {
+            let vertical = Layout::vertical([Constraint::Length(3)]).flex(Flex::Center);
+            let horizontal =
+                Layout::horizontal([Constraint::Length(alert.len() as u16 + 2)]).flex(Flex::Center);
+            let [area] = vertical.areas(frame.area());
+            let [area] = horizontal.areas(area);
+
+            frame.render_widget(Clear, area);
+            frame.render_widget(widget_popup::build(self, &alert), area);
         }
     }
 

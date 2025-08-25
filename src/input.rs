@@ -36,12 +36,13 @@ pub fn handle_events(app: &mut App) -> Message {
     }) = event
     {
         match code {
-            KeyCode::Char('q') | KeyCode::Esc => return Message::Exit,
+            KeyCode::Char('q') => return Message::Exit,
             KeyCode::Char('c') | KeyCode::Char('d') => {
                 if modifiers.eq(&KeyModifiers::CONTROL) {
                     return Message::Exit;
                 }
             }
+            KeyCode::Esc => return Message::ClearError,
             KeyCode::Char('R') => return Message::ReloadConfig,
             KeyCode::Char('r') => return Message::ReloadMusic,
             KeyCode::Enter => {
