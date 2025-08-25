@@ -1,7 +1,6 @@
 use std::{
     fs::File,
     io::{self, BufReader, Write},
-    ops::Range,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Sender},
@@ -335,14 +334,6 @@ impl Songs {
             .flatten()
     }
 
-    pub fn push_songs_back(&mut self, song_indicies: Range<usize>) {
-        self.songs_next.extend(song_indicies.into_iter());
-    }
-
-    pub fn shuffle(&mut self) {
-        self.songs_next.shuffle(&mut rand::thread_rng());
-    }
-
     pub fn push_song_back(&mut self, selected: usize) {
         self.songs_next.push(selected);
     }
@@ -384,23 +375,20 @@ impl Songs {
         self.songs_next.remove(selected);
     }
 
-    pub fn get_next_by_index(&self, selected: usize) -> Option<usize> {
+    pub fn next_by_index(&self, selected: usize) -> Option<usize> {
         self.songs_next.get(selected).copied()
     }
 
     pub fn push_back_all(&mut self) {
-        match &self.showing_songs_library {
-            SongList::All => {
-                if self.songs_in_library() > 0 {
-                    self.push_songs_back(0..self.songs_in_library() - 1);
-                }
-            }
-            SongList::Filtered(songs) => {
-                songs.iter().for_each(|song| {
-                    self.songs_next.push(*song);
-                });
-            }
-        }
+        let mut adding: Vec<usize> = match &self.showing_songs_library {
+            SongList::All => (0..self.songs_in_library() - 1).collect(),
+            SongList::Filtered(songs) => songs.clone(),
+        };
+
+        adding.shuffle(&mut rand::thread_rng());
+        adding.iter().for_each(|song| {
+            self.songs_next.push(*song);
+        });
     }
 
     pub fn reload(&mut self, config: &Config) -> Result<(), Error> {

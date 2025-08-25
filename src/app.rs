@@ -179,7 +179,6 @@ impl App {
             }
             Message::PlayAll => {
                 self.songs.push_back_all();
-                self.songs.shuffle();
             }
             Message::Find => {
                 self.song_query = Some("".to_owned());
@@ -221,7 +220,7 @@ impl App {
                 NavState::UpNext(table_state) => {
                     table_state.selected().map(|selected| {
                         let selected = selected + 1;
-                        self.songs.get_next_by_index(selected).map(|library_index| {
+                        self.songs.next_by_index(selected).map(|library_index| {
                             self.songs.remove_next_up(selected);
                             self.songs.push_song_front(library_index);
                             self.songs.kill_current();
