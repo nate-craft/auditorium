@@ -13,7 +13,7 @@
 - [x] Selection screen for custom music folder -> moved to configuration
 - [x] Allow regeneration/rescanning of Music directory
 - [x] Error/alert pop up
-- [ ] Add clap to allow for `-d|--dir` flag to pick music directory
+- [x] Add clap to allow for `-d|--dir` flag to pick music directory
 - [ ] Multiple authors loading from initial ffprobe parsing
 - [ ] Fzf searching in a given pane (search box top right, 3 line constraint)
 - [ ] Arch PKGBUILD automation
