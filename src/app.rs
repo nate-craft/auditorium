@@ -12,7 +12,9 @@ use crate::{
     input,
     mpv::MpvCommand,
     songs::Songs,
-    widget::{widget_all, widget_history, widget_playing, widget_popup, widget_up_next},
+    widget::{
+        widget_history, widget_library, widget_playing, widget_popup, widget_search, widget_up_next,
+    },
 };
 
 #[derive(PartialEq, Eq)]
@@ -20,6 +22,7 @@ pub enum NavState {
     Player,
     UpNext(TableState),
     Library(TableState),
+    Search,
     Exit,
 }
 
@@ -37,6 +40,7 @@ pub struct App {
     pub song_state: SongLoadingState,
     pub click_position: Option<Position>,
     pub alert: Option<String>,
+    pub song_query: Option<String>,
 }
 
 pub enum Message {
@@ -54,7 +58,10 @@ pub enum Message {
     PlayAll,
     ReloadConfig,
     ReloadMusic,
-    ClearError,
+    Escape,
+    Find,
+    ModifyFind(Option<char>),
+    ClearUpNext,
 }
 
 impl NavState {
@@ -108,6 +115,7 @@ impl NavState {
                     NavState::Library(TableState::default())
                 }
             }
+            NavState::Search => NavState::Search,
             NavState::Exit => NavState::Exit,
         }
     }
@@ -123,6 +131,7 @@ impl App {
             paused: false,
             click_position: None,
             alert: None,
+            song_query: None,
         }
     }
 
@@ -133,7 +142,11 @@ impl App {
                 self.exit();
                 return Ok(());
             }
-            Message::ClearError => self.alert = None,
+            Message::Escape => {
+                self.alert = None;
+                self.song_query = None;
+                self.songs.unfiltered();
+            }
             Message::Pause(paused) => {
                 if let Err(_) = MpvCommand::TogglePause.run() {
                     self.alert = Some("Error querying MPV for pause information".to_owned());
@@ -165,11 +178,33 @@ impl App {
                 self.songs.remove_next_up(selected);
             }
             Message::PlayAll => {
-                if self.songs.songs_library.len() > 0 {
-                    self.songs
-                        .push_songs_back(0..self.songs.songs_in_library() - 1);
-                }
+                self.songs.push_back_all();
                 self.songs.shuffle();
+            }
+            Message::Find => {
+                self.song_query = Some("".to_owned());
+                self.songs.filtered(self.song_query.as_ref());
+                self.set_nav_state(NavState::Search);
+            }
+            Message::ModifyFind(addition) => {
+                match addition {
+                    Some(addition) => {
+                        if let Some(query) = self.song_query.as_mut() {
+                            query.push(addition);
+                        }
+                    }
+                    None => {
+                        if let Some(query) = self.song_query.as_mut() {
+                            if query.len() > 0 {
+                                query.truncate(query.len() - 1);
+                            }
+                        }
+                    }
+                }
+                self.songs.filtered(self.song_query.as_ref());
+            }
+            Message::ClearUpNext => {
+                self.songs.clear_up_next();
             }
             Message::ReloadConfig => {
                 self.config.reload()?;
@@ -195,7 +230,8 @@ impl App {
                 }
                 NavState::Library(table_state) => {
                     if let Some(selected) = table_state.selected() {
-                        self.songs.push_song_back(selected);
+                        let real_index = self.songs.showing_songs_library.real_index(selected);
+                        self.songs.push_song_back(real_index);
                     };
                 }
                 _ => {}
@@ -238,11 +274,13 @@ impl App {
             .title(" Music ")
             .title_alignment(Alignment::Center)
             .title_style(Style::default().bold())
-            .title_bottom("| [Tab] Nav |")
+            .title_bottom("| [Tab] Nav | [j/k] Up/Down |")
             .borders(Borders::all());
         let outer_area = outer_border.inner(frame.area());
 
         let [left, right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(outer_area);
+        let [right_top, right_bottom] =
+            Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).areas(right);
         let [left_top, left_middle, left_bottom] = Layout::vertical([
             Constraint::Length(5),
             Constraint::Fill(1),
@@ -254,18 +292,34 @@ impl App {
             self.set_nav_state(NavState::Player);
         } else if self.click_position_matches_rect(left_middle) {
             self.set_nav_state(NavState::UpNext(TableState::default()).as_stateful_default(&self));
-        } else if self.click_position_matches_rect(right) {
+        } else if self.click_position_matches_rect(right_bottom) {
             self.set_nav_state(NavState::Library(TableState::default()).as_stateful_default(&self));
+        } else if self.click_position_matches_rect(right_top) {
+            self.set_nav_state(NavState::Search);
+            if self.song_query.is_none() {
+                self.song_query = Some("".to_string());
+            }
         }
 
-        let widget_playing = widget_playing::widget_playing(self);
-        let widget_history = widget_history::widget_history(self);
+        let widget_playing = widget_playing::build(self);
+        let widget_history = widget_history::build(self);
+        let mut widget_search = widget_search::build(self);
         let mut widget_next = widget_up_next::build(self, left_middle);
-        let mut widget_all = widget_all::build(self, right);
+        let mut widget_library = widget_library::build(self, right_bottom);
 
-        frame.render_widget(outer_border, frame.area());
-        frame.render_widget(widget_history, left_bottom);
-        frame.render_widget(widget_playing, left_top);
+        if let NavState::Search = self.nav_state {
+            let mut border = Block::bordered()
+                .border_style(Style::new().fg(self.config.color_border))
+                .border_type(BorderType::Thick)
+                .title_alignment(Alignment::Center)
+                .title_top(" Find Song ");
+
+            if self.song_query.is_some() {
+                border = border.title_bottom(" | [Esc] Clear | ");
+            }
+
+            widget_search = widget_search.block(border);
+        }
 
         if let NavState::UpNext(state) = &mut self.nav_state {
             widget_next = widget_next.block(
@@ -273,7 +327,7 @@ impl App {
                     .border_style(Style::new().fg(self.config.color_border))
                     .border_type(BorderType::Thick)
                     .title_top(" Up Next ")
-                    .title_bottom(" | [j/k] Up/Down | [Enter] Play Now | [Backspace] Remove | ")
+                    .title_bottom(" | [Enter] Play Now | [Backspace] Remove | [c] Clear | ")
                     .title_alignment(Alignment::Center),
             );
             frame.render_stateful_widget(widget_next, left_middle, state);
@@ -287,22 +341,22 @@ impl App {
         }
 
         if let NavState::Library(state) = &mut self.nav_state {
-            widget_all = widget_all.block(
+            widget_library = widget_library.block(
                 Block::bordered()
                     .border_style(Style::new().fg(self.config.color_border))
                     .title(" Library ")
                     .border_type(BorderType::Thick)
-                    .title_bottom(" | [j/k] Up/Down | [Enter] Play Later | [a] Play All | ")
+                    .title_bottom(" | [/] Search | [Enter] Play Later | [a] Play All | ")
                     .title_alignment(Alignment::Center),
             );
-            frame.render_stateful_widget(widget_all, right, state);
+            frame.render_stateful_widget(widget_library, right_bottom, state);
         } else {
-            widget_all = widget_all.block(
+            widget_library = widget_library.block(
                 Block::bordered()
                     .title(" Library ")
                     .title_alignment(Alignment::Center),
             );
-            frame.render_widget(widget_all, right);
+            frame.render_widget(widget_library, right_bottom);
         }
 
         if let Some(alert) = &self.alert {
@@ -315,6 +369,11 @@ impl App {
             frame.render_widget(Clear, area);
             frame.render_widget(widget_popup::build(self, &alert), area);
         }
+
+        frame.render_widget(outer_border, frame.area());
+        frame.render_widget(widget_history, left_bottom);
+        frame.render_widget(widget_playing, left_top);
+        frame.render_widget(widget_search, right_top);
     }
 
     pub fn exit(&mut self) {
@@ -345,13 +404,14 @@ impl App {
     pub fn previous_nav_state(&mut self) {
         match self.nav_state {
             NavState::Player => {
-                self.nav_state = NavState::Library(TableState::default()).as_stateful_default(self);
+                self.nav_state = NavState::UpNext(TableState::default()).as_stateful_default(self);
             }
             NavState::UpNext(_) => {
-                self.nav_state = NavState::Player;
+                self.nav_state = NavState::Library(TableState::default()).as_stateful_default(self);
             }
-            NavState::Library(_) => {
-                self.nav_state = NavState::UpNext(TableState::default()).as_stateful_default(self);
+            NavState::Library(_) => self.nav_state = NavState::Search,
+            NavState::Search => {
+                self.nav_state = NavState::Player;
             }
             NavState::Exit => {}
         }
@@ -360,13 +420,16 @@ impl App {
     pub fn next_nav_state(&mut self) {
         match self.nav_state {
             NavState::Player => {
-                self.nav_state = NavState::UpNext(TableState::default()).as_stateful_default(self);
+                self.nav_state = NavState::Search;
             }
             NavState::UpNext(_) => {
-                self.nav_state = NavState::Library(TableState::default()).as_stateful_default(self);
+                self.nav_state = NavState::Player;
             }
             NavState::Library(_) => {
-                self.nav_state = NavState::Player;
+                self.nav_state = NavState::UpNext(TableState::default()).as_stateful_default(self);
+            }
+            NavState::Search => {
+                self.nav_state = NavState::Library(TableState::default()).as_stateful_default(self);
             }
             NavState::Exit => {}
         }

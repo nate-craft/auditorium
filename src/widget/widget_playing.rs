@@ -10,7 +10,7 @@ use crate::mpv::MpvCommandFeedback;
 use crate::App;
 use crate::NavState;
 
-pub fn widget_playing<'a>(app: &mut App) -> Paragraph<'a> {
+pub fn build<'a>(app: &mut App) -> Paragraph<'a> {
     let mut widget_playing = {
         if let Some(playing) = app.songs.current_song() {
             Paragraph::new(vec![

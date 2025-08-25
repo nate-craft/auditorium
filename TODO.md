@@ -14,6 +14,6 @@
 - [x] Allow regeneration/rescanning of Music directory
 - [x] Error/alert pop up
 - [x] Add clap to allow for `-d|--dir` flag to pick music directory
+- [x] Fzf searching in a given pane (search box top right, 3 line constraint)
 - [ ] Multiple authors loading from initial ffprobe parsing
-- [ ] Fzf searching in a given pane (search box top right, 3 line constraint)
 - [ ] Arch PKGBUILD automation

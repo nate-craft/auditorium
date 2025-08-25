@@ -8,15 +8,14 @@ use crate::App;
 
 pub fn build<'a>(app: &App) -> Paragraph<'a> {
     Paragraph::new(vec![Line::from(
-        app.songs
-            .last_played()
-            .map(|song| song.title.clone())
-            .unwrap_or_else(|| "No Previous Songs".to_owned()),
+        app.song_query
+            .as_ref()
+            .map(|query| format!("Searching: {}", query))
+            .unwrap_or("".to_owned()),
     )])
-    .centered()
     .block(
         Block::bordered()
-            .title_top(" Last Played ")
+            .title_top(" Find Song ")
             .title_alignment(Alignment::Center),
     )
 }

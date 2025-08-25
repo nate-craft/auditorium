@@ -20,6 +20,8 @@ Auditorium is a cross-platform, local, simple, fast, and distraction free CLI ap
 
 - Simple "Play All" key to shuffle all local music
 
+- Built-in fuzzy finder with category-specific searching 
+
 - Theming support with a hot-reloadable configuration
 
 - Hot-reloadable music directory so you never need to exit the program
@@ -41,10 +43,31 @@ Auditorium requires [mpv](https://mpv.io/) and [ffmpeg](https://ffmpeg.org/index
 
 ___
 
+## Fuzzy Finder
+
+The built-in fuzzy finder can be activated by pressing `/` or by pressing `Enter` on the search box. It can
+accept multiple search queries separated by commas. Any non categorized query will filter on artist and
+song title, accepting if it matches either. Otherwise, a category tag must be used.
+
+Examples:
+
+```sh
+# Jazz songs by Laufey
+genre(Jazz),Laufey
+# Any rock song
+genre(Rock)
+# Everything but Metallica
+!Metallica
+# Every song, but no rock, metal, nor rap
+!genre(Rock),!genre(Metal),!genre(Rap)
+```
+
+___
+
 ## Configuration
 
-Auditorium's configuration can be found at `$XDG_CONFIG_HOME/auditorium/config.toml`.
-It can be reloaded at any time with `Shift+R`
+Auditorium's configuration can be found at `$XDG_CONFIG_HOME/auditorium/config.toml`. 
+It can be reloaded at any time with `Shift+R`  
 
 ### Color Formatting
 

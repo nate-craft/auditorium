@@ -19,7 +19,7 @@ pub fn build<'a>(app: &App, area: Rect) -> Table<'a> {
 
     let next: Vec<Row> = app
         .songs
-        .songs_library
+        .showing_songs_library()
         .iter()
         .enumerate()
         .map(|(i, song)| {

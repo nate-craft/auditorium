@@ -29,49 +29,61 @@ pub fn handle_events(app: &mut App) -> Message {
     {
         app.set_click_position(Position::new(column, row));
     } else if let Event::Key(KeyEvent {
-        code,
-        modifiers,
+        code: KeyCode::Char('c') | KeyCode::Char('d'),
+        modifiers: KeyModifiers::CONTROL,
         kind: KeyEventKind::Press,
         ..
     }) = event
     {
+        return Message::Exit;
+    } else if let Event::Key(KeyEvent {
+        code,
+        kind: KeyEventKind::Press,
+        ..
+    }) = event
+    {
+        if app.song_query.is_some() && app.nav_state == NavState::Search {
+            if code == KeyCode::Esc {
+                return Message::Escape;
+            } else if code == KeyCode::Backspace {
+                return Message::ModifyFind(None);
+            } else if let KeyCode::Char(c) = code {
+                return Message::ModifyFind(Some(c));
+            } else if let KeyCode::Tab = code {
+                return Message::NavStateNext;
+            } else if let KeyCode::BackTab = code {
+                return Message::NavStatePrev;
+            } else {
+                return Message::None;
+            }
+        }
+
         match code {
             KeyCode::Char('q') => return Message::Exit,
-            KeyCode::Char('c') | KeyCode::Char('d') => {
-                if modifiers.eq(&KeyModifiers::CONTROL) {
-                    return Message::Exit;
-                }
-            }
-            KeyCode::Esc => return Message::ClearError,
             KeyCode::Char('R') => return Message::ReloadConfig,
             KeyCode::Char('r') => return Message::ReloadMusic,
+            KeyCode::Char('c') => return Message::ClearUpNext,
+            KeyCode::Char('/') => return Message::Find,
+            KeyCode::Char(' ') => return Message::Pause(!app.paused),
+            KeyCode::Char('>') | KeyCode::Char('n') => return Message::SongNext,
+            KeyCode::Char('<') | KeyCode::Char('p') => return Message::SongPrevious,
+            KeyCode::Char('a') => return Message::PlayAll,
+            KeyCode::BackTab => return Message::NavStatePrev,
+            KeyCode::Tab => return Message::NavStateNext,
+            KeyCode::Esc => return Message::Escape,
             KeyCode::Enter => {
-                return Message::MoveSong;
+                if app.nav_state == NavState::Search {
+                    return Message::Find;
+                } else {
+                    return Message::MoveSong;
+                }
             }
-            KeyCode::Char(' ') => {
-                return Message::Pause(!app.paused);
-            }
-            KeyCode::Char('>') | KeyCode::Char('n') => {
-                return Message::SongNext;
-            }
-            KeyCode::Char('<') | KeyCode::Char('p') => {
-                return Message::SongPrevious;
-            }
-            KeyCode::Tab => {
-                return Message::NavStateNext;
-            }
-            KeyCode::BackTab => {
-                return Message::NavStatePrev;
-            }
-            KeyCode::Backspace => {
+            KeyCode::Backspace | KeyCode::Char('d') => {
                 if let NavState::UpNext(table_state) = &app.nav_state {
                     if let Some(selected) = table_state.selected() {
                         return Message::DeleteNextUp(selected + 1);
                     }
                 }
-            }
-            KeyCode::Char('a') => {
-                return Message::PlayAll;
             }
             KeyCode::Char('j') | KeyCode::PageDown | KeyCode::Down => {
                 let elements = match app.nav_state {

@@ -26,10 +26,31 @@ pub struct Song {
 }
 
 pub struct Songs {
-    pub songs_library: Vec<Song>,
+    pub showing_songs_library: SongList,
+    songs_data_library: Vec<Song>,
     songs_next: Vec<usize>,
     songs_history: Vec<usize>,
     active: Option<Child>,
+}
+
+pub enum SongList {
+    All,
+    Filtered(Vec<usize>),
+}
+
+impl SongList {
+    pub fn real_index(&self, index: usize) -> usize {
+        match self {
+            SongList::All => index,
+            SongList::Filtered(indicies) => *indicies.get(index).unwrap(),
+        }
+    }
+
+    fn clear(&mut self) {
+        if let SongList::Filtered(vec) = self {
+            vec.clear();
+        }
+    }
 }
 
 impl Song {
@@ -79,6 +100,36 @@ impl Song {
             .stderr(Stdio::null())
             .spawn()
     }
+
+    fn matches_query(&self, query: &String) -> bool {
+        for query in query.split(",") {
+            if query.starts_with("genre(") && query.ends_with(")") && query.len() > 2 {
+                let sub_query = query[6..query.len() - 2].to_owned();
+                if !self.genre.to_lowercase().contains(&sub_query) {
+                    return false;
+                }
+            } else if query.starts_with("!genre(") && query.ends_with(")") && query.len() > 2 {
+                let sub_query = query[7..query.len() - 2].to_owned();
+                if self.genre.to_lowercase().contains(&sub_query) {
+                    return false;
+                }
+            } else if query.starts_with("!") {
+                if self.title.to_lowercase().contains(query)
+                    || self.artist.to_lowercase().contains(query)
+                {
+                    return false;
+                }
+            } else {
+                if !self.title.to_lowercase().contains(query)
+                    && !self.artist.to_lowercase().contains(query)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 }
 
 impl Songs {
@@ -96,13 +147,14 @@ impl Songs {
         }
 
         let mut songs = Songs {
-            songs_library: song_map,
+            songs_data_library: song_map,
+            showing_songs_library: SongList::All,
             songs_next: Vec::new(),
             songs_history: Vec::new(),
             active: None,
         };
 
-        if songs.songs_library.is_empty() {
+        if songs.songs_data_library.is_empty() {
             println!(
                 "\n{}",
                 "Loading music from Music directory.\n
@@ -123,7 +175,7 @@ impl Songs {
             }
 
             if !config.is_manual_dir() {
-                if let Ok(json) = serde_json::to_string(&songs.songs_library) {
+                if let Ok(json) = serde_json::to_string(&songs.songs_data_library) {
                     if let Ok(mut cache_file) = File::create_new(cache_path) {
                         cache_file.write_all(json.as_bytes()).unwrap();
                     }
@@ -131,7 +183,7 @@ impl Songs {
             }
         }
 
-        songs.songs_library.sort_by(|first, second| {
+        songs.songs_data_library.sort_by(|first, second| {
             first
                 .artist
                 .cmp(&second.artist)
@@ -153,7 +205,7 @@ impl Songs {
             while let Ok(result) = rec.try_recv() {
                 match result {
                     Ok(song) => {
-                        self.songs_library.push(song);
+                        self.songs_data_library.push(song);
                     }
                     Err(e) => {
                         errors.push(e);
@@ -203,13 +255,23 @@ impl Songs {
         }
     }
 
+    pub fn showing_songs_library(&self) -> Vec<&Song> {
+        match &self.showing_songs_library {
+            SongList::All => self.songs_data_library.iter().collect(),
+            SongList::Filtered(indicies) => indicies
+                .iter()
+                .map(|index| self.songs_data_library.get(*index).unwrap())
+                .collect::<Vec<&Song>>(),
+        }
+    }
+
     pub fn current_song_index(&self) -> Option<usize> {
         self.songs_next.get(0).copied()
     }
 
     pub fn current_song(&self) -> Option<&Song> {
         self.current_song_index()
-            .map(|index| self.songs_library.get(index))
+            .map(|index| self.songs_data_library.get(index))
             .flatten()
     }
 
@@ -219,7 +281,7 @@ impl Songs {
         } else {
             self.songs_next[1..]
                 .iter()
-                .filter_map(|index| self.songs_library.get(*index))
+                .filter_map(|index| self.songs_data_library.get(*index))
                 .collect()
         }
     }
@@ -269,7 +331,7 @@ impl Songs {
 
     pub fn last_played(&self) -> Option<&Song> {
         self.last_played_index()
-            .map(|index| self.songs_library.get(index))
+            .map(|index| self.songs_data_library.get(index))
             .flatten()
     }
 
@@ -307,11 +369,15 @@ impl Songs {
     }
 
     pub fn songs_in_library(&self) -> usize {
-        self.songs_library.len()
+        self.songs_data_library.len()
     }
 
     pub fn songs_in_next_up(&self) -> usize {
         self.songs_next.len()
+    }
+
+    pub fn clear_up_next(&mut self) {
+        self.songs_next.truncate(1);
     }
 
     pub fn remove_next_up(&mut self, selected: usize) {
@@ -322,8 +388,24 @@ impl Songs {
         self.songs_next.get(selected).copied()
     }
 
+    pub fn push_back_all(&mut self) {
+        match &self.showing_songs_library {
+            SongList::All => {
+                if self.songs_in_library() > 0 {
+                    self.push_songs_back(0..self.songs_in_library() - 1);
+                }
+            }
+            SongList::Filtered(songs) => {
+                songs.iter().for_each(|song| {
+                    self.songs_next.push(*song);
+                });
+            }
+        }
+    }
+
     pub fn reload(&mut self, config: &Config) -> Result<(), Error> {
-        self.songs_library.clear();
+        self.showing_songs_library.clear();
+        self.songs_data_library.clear();
         self.songs_next.clear();
         self.kill_current();
 
@@ -336,7 +418,7 @@ impl Songs {
                     .unwrap_or("Music FFProbe error".to_owned()),
             ))
         } else {
-            self.songs_library.sort_by(|first, second| {
+            self.songs_data_library.sort_by(|first, second| {
                 first
                     .artist
                     .cmp(&second.artist)
@@ -344,5 +426,37 @@ impl Songs {
             });
             Ok(())
         }
+    }
+
+    pub fn filtered(&mut self, query: Option<&String>) {
+        let query = query.map(|query| query.to_lowercase());
+
+        let filtered: Vec<usize> = if query
+            .as_ref()
+            .map(|query| query.is_empty())
+            .unwrap_or(false)
+        {
+            if self.songs_data_library.len() > 0 {
+                (0..self.songs_data_library.len() - 1).collect()
+            } else {
+                Vec::new()
+            }
+        } else {
+            self.songs_data_library
+                .iter()
+                .enumerate()
+                .filter(|(_, song)| match &query {
+                    Some(query) => song.matches_query(query),
+                    None => true,
+                })
+                .map(|(i, _)| i)
+                .collect()
+        };
+
+        self.showing_songs_library = SongList::Filtered(filtered)
+    }
+
+    pub fn unfiltered(&mut self) {
+        self.showing_songs_library = SongList::All;
     }
 }
