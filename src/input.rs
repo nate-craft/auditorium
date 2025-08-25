@@ -43,6 +43,7 @@ pub fn handle_events(app: &mut App) -> Message {
                 }
             }
             KeyCode::Char('R') => return Message::ReloadConfig,
+            KeyCode::Char('r') => return Message::ReloadMusic,
             KeyCode::Enter => {
                 return Message::MoveSong;
             }

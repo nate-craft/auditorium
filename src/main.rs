@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 
     let config = Config::new()?;
     let cache_path = files::cache_path()?;
-    let songs = Songs::new(&config, &cache_path);
+    let songs = Songs::new(&config, &cache_path)?;
     let app = Arc::new(Mutex::new(App::new(songs, config)));
     let mut terminal = ratatui::init();
 

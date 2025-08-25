@@ -22,9 +22,11 @@ Auditorium is a cross-platform, local, simple, fast, and distraction free CLI ap
 
 - Theming support with a hot-reloadable configuration
 
+- Hot-reloadable music directory so you never need to exit the program
+
 - Never requires leaving the terminal or using the mouse (although mouse support is built-in!)
 
-- Uses minimal resources (under 1 Mb memory)
+- Extremely light memory usage
 
 ___
 

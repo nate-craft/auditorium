@@ -52,6 +52,7 @@ pub enum Message {
     DeleteNextUp(usize),
     PlayAll,
     ReloadConfig,
+    ReloadMusic,
 }
 
 impl NavState {
@@ -168,6 +169,10 @@ impl App {
             }
             Message::ReloadConfig => {
                 self.config.reload()?;
+            }
+            Message::ReloadMusic => {
+                self.songs.reload(&self.config)?;
+                self.set_nav_state(self.nav_state.as_stateful_default(self));
             }
             Message::MoveSong => match &self.nav_state {
                 NavState::UpNext(table_state) => {

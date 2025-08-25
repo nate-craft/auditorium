@@ -8,6 +8,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+use color_eyre::eyre::Error;
 use ffprobe::FfProbeError;
 use random_number::rand::{self, seq::SliceRandom};
 use ratatui::crossterm::style::Stylize;
@@ -81,7 +82,7 @@ impl Song {
 }
 
 impl Songs {
-    pub fn new(config: &Config, cache_path: &Path) -> Songs {
+    pub fn new(config: &Config, cache_path: &Path) -> Result<Songs, Error> {
         let mut song_map = Vec::new();
 
         if cache_path.exists() {
@@ -103,14 +104,22 @@ impl Songs {
 
         if songs.songs_library.is_empty() {
             println!(
-                "{}",
-                "Loading music from Music directory. This may take a moment..."
+                "\n{}",
+                "Loading music from Music directory.\n
+                This is only necessary the first run of Auditorium.\n
+                This may take a moment..."
                     .stylize()
                     .with(config.color_border.into())
             );
 
             if let Some(errors) = songs.load_songs(&config.music_directory) {
-                errors.iter().for_each(|e| eprintln!("{}", e));
+                return Err(Error::msg(
+                    errors
+                        .iter()
+                        .map(|e| e.to_string())
+                        .reduce(|acc, e| format!("{}\n{}", acc, e))
+                        .unwrap_or("Music FFProbe error".to_owned()),
+                ));
             }
 
             if let Ok(json) = serde_json::to_string(&songs.songs_library) {
@@ -120,11 +129,14 @@ impl Songs {
             }
         }
 
-        songs
-            .songs_library
-            .sort_by(|first, second| first.artist.cmp(&second.artist));
+        songs.songs_library.sort_by(|first, second| {
+            first
+                .artist
+                .cmp(&second.artist)
+                .then(first.title.cmp(&second.title))
+        });
 
-        songs
+        Ok(songs)
     }
 
     pub fn load_songs(&mut self, root_dir: &Path) -> Option<Vec<FfProbeError>> {
@@ -306,5 +318,29 @@ impl Songs {
 
     pub fn get_next_by_index(&self, selected: usize) -> Option<usize> {
         self.songs_next.get(selected).copied()
+    }
+
+    pub fn reload(&mut self, config: &Config) -> Result<(), Error> {
+        self.songs_library.clear();
+        self.songs_next.clear();
+        self.kill_current();
+
+        if let Some(errors) = self.load_songs(&config.music_directory) {
+            Err(Error::msg(
+                errors
+                    .iter()
+                    .map(|e| e.to_string())
+                    .reduce(|acc, e| format!("{}\n{}", acc, e))
+                    .unwrap_or("Music FFProbe error".to_owned()),
+            ))
+        } else {
+            self.songs_library.sort_by(|first, second| {
+                first
+                    .artist
+                    .cmp(&second.artist)
+                    .then(first.title.cmp(&second.title))
+            });
+            Ok(())
+        }
     }
 }
