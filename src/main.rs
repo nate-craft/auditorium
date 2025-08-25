@@ -1,7 +1,9 @@
+use clap::{arg, command, Parser};
 use color_eyre::{eyre::Error, Result};
 use crossterm::ExecutableCommand;
 use std::{
     io::{self},
+    path::PathBuf,
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
     time::Duration,
@@ -23,10 +25,18 @@ mod widget;
 
 const MPV_SOCKET: &'static str = "/tmp/mpv-socket";
 
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Flags {
+    #[arg(short, long)]
+    dir: Option<PathBuf>,
+}
+
 fn main() -> Result<()> {
     color_eyre::install()?;
+    let flags = Flags::parse();
 
-    let config = Config::new()?;
+    let config = Config::with_dir(flags.dir)?;
     let cache_path = files::cache_path()?;
     let songs = Songs::new(&config, &cache_path)?;
     let app = Arc::new(Mutex::new(App::new(songs, config)));

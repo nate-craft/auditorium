@@ -15,7 +15,9 @@ pub struct Config {
     pub color_border: Color,
     pub color_headers: Color,
     pub color_row: Color,
-    pub music_directory: PathBuf,
+    music_directory: PathBuf,
+    #[serde(skip)]
+    manual_music_directory: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -25,11 +27,19 @@ impl Default for Config {
             color_headers: Color::Green,
             color_row: Color::Indexed(246),
             music_directory: music_path().unwrap_or(Path::new("Music").to_path_buf()),
+            manual_music_directory: None,
         }
     }
 }
 
 impl Config {
+    pub fn with_dir(dir: Option<PathBuf>) -> Result<Config, Error> {
+        Self::new().map(|mut config| {
+            config.manual_music_directory = dir.clone();
+            config
+        })
+    }
+
     pub fn new() -> Result<Config, Error> {
         let path = config_path()?;
 
@@ -49,8 +59,23 @@ impl Config {
         }
     }
 
+    pub fn is_manual_dir(&self) -> bool {
+        self.manual_music_directory
+            .as_ref()
+            .map(|dir| !dir.eq(&self.music_directory))
+            .unwrap_or(false)
+    }
+
+    pub fn music_directory(&self) -> &PathBuf {
+        if let Some(dir) = &self.manual_music_directory {
+            &dir
+        } else {
+            &self.music_directory
+        }
+    }
+
     pub fn reload(&mut self) -> Result<(), Error> {
-        *self = Self::new()?;
+        *self = Self::with_dir(self.manual_music_directory.clone())?;
         Ok(())
     }
 }

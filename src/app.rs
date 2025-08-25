@@ -179,7 +179,7 @@ impl App {
                 self.set_nav_state(self.nav_state.as_stateful_default(self));
                 self.alert = Some(format!(
                     "New music library loaded from {}",
-                    self.config.music_directory.to_string_lossy()
+                    self.config.music_directory().to_string_lossy()
                 ));
             }
             Message::MoveSong => match &self.nav_state {

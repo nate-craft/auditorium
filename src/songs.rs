@@ -85,7 +85,7 @@ impl Songs {
     pub fn new(config: &Config, cache_path: &Path) -> Result<Songs, Error> {
         let mut song_map = Vec::new();
 
-        if cache_path.exists() {
+        if !config.is_manual_dir() && cache_path.exists() {
             if let Ok(file) = File::open(cache_path) {
                 let songs_cached: Result<Vec<Song>, _> =
                     serde_json::from_reader(BufReader::new(file));
@@ -112,7 +112,7 @@ impl Songs {
                     .with(config.color_border.into())
             );
 
-            if let Some(errors) = songs.load_songs(&config.music_directory) {
+            if let Some(errors) = songs.load_songs(config.music_directory()) {
                 return Err(Error::msg(
                     errors
                         .iter()
@@ -122,9 +122,11 @@ impl Songs {
                 ));
             }
 
-            if let Ok(json) = serde_json::to_string(&songs.songs_library) {
-                if let Ok(mut cache_file) = File::create_new(cache_path) {
-                    cache_file.write_all(json.as_bytes()).unwrap();
+            if !config.is_manual_dir() {
+                if let Ok(json) = serde_json::to_string(&songs.songs_library) {
+                    if let Ok(mut cache_file) = File::create_new(cache_path) {
+                        cache_file.write_all(json.as_bytes()).unwrap();
+                    }
                 }
             }
         }
@@ -325,7 +327,7 @@ impl Songs {
         self.songs_next.clear();
         self.kill_current();
 
-        if let Some(errors) = self.load_songs(&config.music_directory) {
+        if let Some(errors) = self.load_songs(config.music_directory()) {
             Err(Error::msg(
                 errors
                     .iter()
