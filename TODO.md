@@ -11,9 +11,9 @@
 - [x] Move drawing to a different thread to allow for frame rate regulation
 - [x] Add configuration for color theming (need XDG standard crate)
 - [x] Selection screen for custom music folder -> moved to configuration
-- [ ] Add clap to allow for `-d|--dir` flag to pick music directory
 - [x] Allow regeneration/rescanning of Music directory
+- [x] Error/alert pop up
+- [ ] Add clap to allow for `-d|--dir` flag to pick music directory
 - [ ] Multiple authors loading from initial ffprobe parsing
-- [ ] Error pop up (possibly incorporated into border)
 - [ ] Fzf searching in a given pane (search box top right, 3 line constraint)
 - [ ] Arch PKGBUILD automation
