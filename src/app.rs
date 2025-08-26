@@ -314,7 +314,9 @@ impl App {
                 .title_top(" Find Song ");
 
             if self.song_query.is_some() {
-                border = border.title_bottom(" | [Esc] Clear | ");
+                border = border.title_bottom(" | [Esc] Clear | [Tab] Nav | ");
+            } else {
+                border = border.title_bottom(" | [/] Search | ");
             }
 
             widget_search = widget_search.block(border);

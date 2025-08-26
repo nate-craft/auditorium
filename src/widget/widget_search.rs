@@ -16,6 +16,7 @@ pub fn build<'a>(app: &App) -> Paragraph<'a> {
     .block(
         Block::bordered()
             .title_top(" Find Song ")
+            .title_bottom(" | [/] Search | ")
             .title_alignment(Alignment::Center),
     )
 }
