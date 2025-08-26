@@ -102,13 +102,13 @@ impl Song {
 
     fn matches_query(&self, query: &String) -> bool {
         for query in query.split(",") {
-            if query.starts_with("genre(") && query.ends_with(")") && query.len() > 2 {
-                let sub_query = query[6..query.len() - 2].to_owned();
+            if query.starts_with("genre(") && query.ends_with(")") && query.len() > 8 {
+                let sub_query = query[6..query.len() - 1].to_owned();
                 if !self.genre.to_lowercase().contains(&sub_query) {
                     return false;
                 }
-            } else if query.starts_with("!genre(") && query.ends_with(")") && query.len() > 2 {
-                let sub_query = query[7..query.len() - 2].to_owned();
+            } else if query.starts_with("!genre(") && query.ends_with(")") && query.len() > 9 {
+                let sub_query = query[7..query.len() - 1].to_owned();
                 if self.genre.to_lowercase().contains(&sub_query) {
                     return false;
                 }
