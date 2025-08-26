@@ -1,5 +1,6 @@
 # TODO
 
+## Pre-1.0
 - [x] BUG -> skipping song should set state.pause=false
 - [x] History (Key: <), Just play back
 - [x] Quick actions popup for moving up/removing up next
@@ -15,5 +16,9 @@
 - [x] Error/alert pop up
 - [x] Add clap to allow for `-d|--dir` flag to pick music directory
 - [x] Fzf searching in a given pane (search box top right, 3 line constraint)
+
+## Post-1.0
+- [ ] Clean up filtering/music data distinction on Songs access
+- [ ] Refactor widgets to handle constraints in their build function
 - [ ] Multiple authors loading from initial ffprobe parsing
 - [ ] Arch PKGBUILD automation
