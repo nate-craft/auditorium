@@ -43,6 +43,35 @@ Auditorium requires [mpv](https://mpv.io/) and [ffmpeg](https://ffmpeg.org/index
 
 ___
 
+## Key Binds
+
+### Global
+
+- `Shift+r`       : Reload configuration
+- `r`             : Reload music directory
+- `Tab/Shift+Tab` : Navigate to next panel
+
+### Player
+
+- `Space`         : Play/Pause current song
+- `</>`           : Next/Previous song
+
+### Up Next
+
+- `Backspace|d`   : Remove from "Up Next"
+- `Enter`         : Play now
+- `j/k|Up/Down`   : Navigation current selection
+- `c`             : Clear "Up Next"
+
+### Library
+
+- `a`             : Add all to "Up Next"
+- `/`             : Fuzzy finding search
+- `j/k|Up/Down`   : Navigation current selection
+- `Enter`         : Add song to "Up Next"
+
+___
+
 ## Fuzzy Finder
 
 The built-in fuzzy finder can be activated by pressing `/` or by pressing `Enter` on the search box. It can
@@ -66,7 +95,7 @@ ___
 
 ## Configuration
 
-Auditorium's configuration can be found at `$XDG_CONFIG_HOME/auditorium/config.toml`. 
+Auditorium's configuration can be found at `$XDG_CONFIG_HOME/auditorium/config.toml`.  
 It can be reloaded at any time with `Shift+R`  
 
 ### Color Formatting

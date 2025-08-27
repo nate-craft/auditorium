@@ -18,6 +18,8 @@
 - [x] Fzf searching in a given pane (search box top right, 3 line constraint)
 
 ## Post-1.0
+- [ ] Only allow audio file types when scanning music directory
+- [ ] Add in playlist support for `-p|--playlist`
 - [ ] Clean up filtering/music data distinction on Songs access
 - [ ] Refactor widgets to handle constraints in their build function
 - [ ] Multiple authors loading from initial ffprobe parsing
