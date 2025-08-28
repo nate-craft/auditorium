@@ -18,6 +18,7 @@
 - [x] Fzf searching in a given pane (search box top right, 3 line constraint)
 
 ## Post-1.0
+- [x] Add seek/skip functionality with left/right keys
 - [ ] Only allow audio file types when scanning music directory
 - [ ] Add in playlist support for `-p|--playlist`
 - [ ] Clean up filtering/music data distinction on Songs access

@@ -11,6 +11,7 @@ use crate::{utilities::progress_formatted, MPV_SOCKET};
 pub enum MpvCommand {
     TogglePause,
     GetProgress,
+    Seek(i32),
 }
 
 pub enum MpvCommandFeedback {
@@ -19,8 +20,13 @@ pub enum MpvCommandFeedback {
 }
 
 impl MpvCommand {
+    /// See: https://mpv.io/manual/stable/#list-of-input-commands
     pub fn run(&self) -> Result<MpvCommandFeedback, std::io::Error> {
         match self {
+            MpvCommand::Seek(target) => {
+                let cmd = json!({"command" : ["seek", target.to_string(), "relative"]}).to_string();
+                Self::send_to_ipc(&cmd).map(|_| MpvCommandFeedback::Void)
+            }
             MpvCommand::TogglePause => {
                 let cmd_get = json!({"command" : ["get_property", "pause"]}).to_string();
                 let json = serde_json::from_str::<HashMap<String, Value>>(&Self::read_from_ipc(

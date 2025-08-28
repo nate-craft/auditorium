@@ -55,6 +55,7 @@ ___
 
 - `Space`         : Play/Pause current song
 - `</>`           : Next/Previous song
+- `Left\Right`    : Seek forward/backward
 
 ### Up Next
 

@@ -62,6 +62,8 @@ pub enum Message {
     Find,
     ModifyFind(Option<char>),
     ClearUpNext,
+    SongSeekForward,
+    SongSeekBackward,
 }
 
 impl NavState {
@@ -152,6 +154,16 @@ impl App {
                     self.alert = Some("Error querying MPV for pause information".to_owned());
                 } else {
                     self.paused = paused;
+                }
+            }
+            Message::SongSeekForward => {
+                if let Err(_) = MpvCommand::Seek(5).run() {
+                    self.alert = Some("Error seeking forward with MPV".to_owned());
+                }
+            }
+            Message::SongSeekBackward => {
+                if let Err(_) = MpvCommand::Seek(-5).run() {
+                    self.alert = Some("Error seeking forward with MPV".to_owned());
                 }
             }
             Message::SongNext => {

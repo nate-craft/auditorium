@@ -13,8 +13,8 @@ use random_number::rand::{self, seq::SliceRandom};
 use ratatui::crossterm::style::Stylize;
 use serde::{Deserialize, Serialize};
 
-use crate::MPV_SOCKET;
 use crate::{app::SongLoadingState, files::Config};
+use crate::{files, MPV_SOCKET};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Song {
@@ -175,7 +175,7 @@ impl Songs {
 
             if !config.is_manual_dir() {
                 if let Ok(json) = serde_json::to_string(&songs.songs_data_library) {
-                    if let Ok(mut cache_file) = File::create_new(cache_path) {
+                    if let Ok(mut cache_file) = File::create(cache_path) {
                         cache_file.write_all(json.as_bytes()).unwrap();
                     }
                 }
@@ -412,6 +412,15 @@ impl Songs {
                     .cmp(&second.artist)
                     .then(first.title.cmp(&second.title))
             });
+
+            if !config.is_manual_dir() {
+                if let Ok(json) = serde_json::to_string(&self.songs_data_library) {
+                    if let Ok(mut cache_file) = File::create(files::cache_path()?) {
+                        cache_file.write_all(json.as_bytes()).unwrap();
+                    }
+                }
+            }
+
             Ok(())
         }
     }

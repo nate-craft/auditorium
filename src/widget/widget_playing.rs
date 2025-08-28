@@ -50,9 +50,9 @@ pub fn build<'a>(app: &mut App) -> Paragraph<'a> {
     };
 
     let title_player = if app.paused {
-        "| [Space] Play | [</>] Prev/Next |"
+        " | [Space] Play | [</>] Prev/Next | [Left/Right] Seek | "
     } else {
-        "| [Space] Pause | [</>] Prev/Next |"
+        " | [Space] Pause | [</>] Prev/Next | [Left/Right] Seek | "
     };
 
     if app.nav_state == NavState::Player {
