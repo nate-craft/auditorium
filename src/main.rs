@@ -63,12 +63,13 @@ fn main() -> Result<()> {
             return Err(err);
         }
 
-        thread::sleep(Duration::from_millis(20));
+        thread::sleep(Duration::from_millis(35));
     });
 
     let app_ref = app.clone();
     let handle: JoinHandle<Result<()>> = thread::spawn(move || loop {
         let Ok(mut app) = app_ref.try_lock() else {
+            // thread::sleep(Duration::from_millis(35));
             continue;
         };
 
@@ -85,8 +86,6 @@ fn main() -> Result<()> {
             app.exit();
             return Err(err);
         }
-
-        thread::sleep(Duration::from_millis(5));
     });
 
     loop {
