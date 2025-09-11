@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "auditorium"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "color-eyre",
