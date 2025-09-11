@@ -3,14 +3,19 @@ use std::{
     io::{self, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::mpsc::{self, Sender},
-    thread::{self, JoinHandle},
+    sync::{Arc, Mutex},
 };
 
 use color_eyre::eyre::Error;
+use crossterm::{
+    cursor::MoveTo,
+    style::Print,
+    terminal::{Clear, ClearType},
+};
 use ffprobe::FfProbeError;
 use random_number::rand::{self, seq::SliceRandom};
 use ratatui::crossterm::style::Stylize;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::{app::SongLoadingState, files::Config};
@@ -154,16 +159,7 @@ impl Songs {
         };
 
         if songs.songs_data_library.is_empty() {
-            println!(
-                "\n{}",
-                "Loading music from Music directory.\n
-                This is only necessary the first run of Auditorium.\n
-                This may take a moment..."
-                    .stylize()
-                    .with(config.color_border.into())
-            );
-
-            if let Some(errors) = songs.load_songs(config.music_directory()) {
+            if let Some(errors) = songs.load_songs(config, true) {
                 return Err(Error::msg(
                     errors
                         .iter()
@@ -192,46 +188,70 @@ impl Songs {
         Ok(songs)
     }
 
-    pub fn load_songs(&mut self, root_dir: &Path) -> Option<Vec<FfProbeError>> {
-        let (send, rec) = mpsc::channel::<Result<Song, FfProbeError>>();
-        let (send_threads, rec_threads) = mpsc::channel::<JoinHandle<()>>();
-        let mut errors = Vec::new();
-        let mut num_started = 0;
-        let mut num_ended = 0;
-        Self::add_from_dir(send.clone(), send_threads.clone(), root_dir);
+    pub fn load_songs(&mut self, config: &Config, first_load: bool) -> Option<Vec<FfProbeError>> {
+        let mut song_paths = Vec::new();
+        Self::load_dir(&config.music_directory(), &mut song_paths);
 
-        loop {
-            while let Ok(result) = rec.try_recv() {
-                match result {
-                    Ok(song) => {
-                        self.songs_data_library.push(song);
-                    }
-                    Err(e) => {
-                        errors.push(e);
-                    }
+        rlimit::increase_nofile_limit(u64::MAX).unwrap();
+        let tagged = Arc::new(Mutex::new(0));
+
+        let results: Vec<Result<Song, FfProbeError>> = song_paths
+            .par_iter()
+            .map(|path| {
+                let song = Song::new(path);
+
+                if !first_load {
+                    return song;
                 }
-                num_ended += 1;
-            }
 
-            while let Ok(_) = rec_threads.try_recv() {
-                num_started += 1;
-            }
+                let mut tagged = tagged.lock().unwrap();
+                *tagged += 1;
+                let completed = format!("{}/{} Songs", *tagged, song_paths.len());
+                crossterm::execute!(io::stdout(), Clear(ClearType::All)).unwrap();
+                crossterm::execute!(io::stdout(), MoveTo(0, 0)).unwrap();
+                crossterm::execute!(
+                    io::stdout(),
+                    Print(format!(
+                        "{}\n",
+                        "Caching metadata for your library. This is only required once..."
+                            .stylize()
+                            .with(config.color_border.into())
+                    ))
+                )
+                .unwrap();
+                crossterm::execute!(
+                    io::stdout(),
+                    Print(format!(
+                        "{}: {}\n",
+                        "Tagged".stylize().with(config.color_border.into()),
+                        completed.stylize().with(config.color_border.into())
+                    ))
+                )
+                .unwrap();
+                song
+            })
+            .collect();
 
-            if num_ended >= num_started {
-                if errors.is_empty() {
-                    return None;
-                } else {
-                    return Some(errors);
-                }
-            }
+        let length_results = results.len();
+        let valid: Vec<&Song> = results
+            .iter()
+            .filter_map(|song| song.as_ref().ok())
+            .collect();
+
+        if valid.len() == length_results {
+            self.songs_data_library = results.into_iter().filter_map(|song| song.ok()).collect();
+            return None;
         }
+
+        return Some(
+            results
+                .into_iter()
+                .filter_map(|result| result.err())
+                .collect(),
+        );
     }
 
-    pub fn add_from_dir(
-        send: Sender<Result<Song, FfProbeError>>,
-        send_threads: Sender<JoinHandle<()>>,
-        dir: &Path,
-    ) {
+    fn load_dir(dir: &Path, song_paths: &mut Vec<PathBuf>) {
         if let Ok(child) = dir.read_dir() {
             child.for_each(|child_result| {
                 let Ok(child) = child_result else {
@@ -240,15 +260,9 @@ impl Songs {
 
                 let child_path = child.path();
                 if child_path.is_dir() {
-                    Self::add_from_dir(send.clone(), send_threads.clone(), &child_path);
+                    Self::load_dir(&child_path, song_paths);
                 } else {
-                    let send_clone = send.clone();
-                    send_threads
-                        .send(thread::spawn(move || match Song::new(&child_path) {
-                            Ok(song) => send_clone.clone().send(Ok(song)).unwrap(),
-                            Err(e) => send_clone.clone().send(Err(e)).unwrap(),
-                        }))
-                        .unwrap();
+                    song_paths.push(child_path);
                 }
             });
         }
@@ -397,7 +411,7 @@ impl Songs {
         self.songs_next.clear();
         self.kill_current();
 
-        if let Some(errors) = self.load_songs(config.music_directory()) {
+        if let Some(errors) = self.load_songs(config, false) {
             Err(Error::msg(
                 errors
                     .iter()

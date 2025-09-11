@@ -1,5 +1,3 @@
-// const CACHE_FILE: &'static str = "/home/nate/.cache/music-player-cache.json";
-
 use std::{
     fs::{self, File},
     io::BufReader,
