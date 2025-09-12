@@ -28,6 +28,8 @@ Auditorium is a cross-platform, local, simple, fast, and distraction free CLI ap
 
 - Never requires leaving the terminal or using the mouse (although mouse support is built-in!)
 
+- Optional [MPRIS](https://wiki.archlinux.org/title/MPRIS) support for system-wide control
+
 - Extremely light memory usage
 
 ___
@@ -36,7 +38,11 @@ ___
 
 Auditorium can be installed via [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
 ```bash
+# Lighter terminal-only controlled system
 cargo install --git https://github.com/nate-craft/auditorium
+
+# Including optional globally-controlled mpris support
+cargo install --git https://github.com/nate-craft/auditorium --features mpris
 ```
 
 Auditorium requires [mpv](https://mpv.io/) and [ffmpeg](https://ffmpeg.org/index.html?) to be installed.

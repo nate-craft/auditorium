@@ -66,7 +66,7 @@ pub fn handle_events(app: &mut App) -> Message {
             KeyCode::Char('r') => return Message::ReloadMusic,
             KeyCode::Char('c') => return Message::ClearUpNext,
             KeyCode::Char('/') => return Message::Find,
-            KeyCode::Char(' ') => return Message::Pause(!app.paused),
+            KeyCode::Char(' ') => return Message::PauseToggle(!app.paused),
             KeyCode::Char('>') | KeyCode::Char('n') => return Message::SongNext,
             KeyCode::Char('<') | KeyCode::Char('p') => return Message::SongPrevious,
             KeyCode::Right => return Message::SongSeekForward,

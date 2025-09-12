@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use crate::{utilities::progress_formatted, MPV_SOCKET};
 
 pub enum MpvCommand {
-    TogglePause,
+    TogglePause(bool),
     GetProgress,
     Seek(i32),
 }
@@ -27,19 +27,19 @@ impl MpvCommand {
                 let cmd = json!({"command" : ["seek", target.to_string(), "relative"]}).to_string();
                 Self::send_to_ipc(&cmd).map(|_| MpvCommandFeedback::Void)
             }
-            MpvCommand::TogglePause => {
-                let cmd_get = json!({"command" : ["get_property", "pause"]}).to_string();
-                let json = serde_json::from_str::<HashMap<String, Value>>(&Self::read_from_ipc(
-                    &cmd_get,
-                )?)?;
+            MpvCommand::TogglePause(paused) => {
+                // let cmd_get = json!({"command" : ["get_property", "pause"]}).to_string();
+                // let json = serde_json::from_str::<HashMap<String, Value>>(&Self::read_from_ipc(
+                //     &cmd_get,
+                // )?)?;
 
-                let paused = json
-                    .get("data")
-                    .ok_or(std::io::Error::other("Couldn't parse json data from IPC"))?
-                    .as_bool()
-                    .ok_or(std::io::Error::other("Couldn't parse json bool from IPC"))?;
+                // let paused = json
+                //     .get("data")
+                //     .ok_or(std::io::Error::other("Couldn't parse json data from IPC"))?
+                //     .as_bool()
+                //     .ok_or(std::io::Error::other("Couldn't parse json bool from IPC"))?;
 
-                let cmd_get = json!({"command" : ["set_property", "pause", !paused]}).to_string();
+                let cmd_get = json!({"command" : ["set_property", "pause", paused]}).to_string();
                 Self::send_to_ipc(&cmd_get).map(|_| MpvCommandFeedback::Void)
             }
             MpvCommand::GetProgress => {

@@ -41,12 +41,14 @@ pub struct App {
     pub click_position: Option<Position>,
     pub alert: Option<String>,
     pub song_query: Option<String>,
+    pub mpris_message: Option<Message>,
 }
 
+#[derive(Clone, Copy)]
 pub enum Message {
     None,
     Exit,
-    Pause(bool),
+    PauseToggle(bool),
     SongNext,
     SongPrevious,
     NavStateNext,
@@ -134,11 +136,30 @@ impl App {
             click_position: None,
             alert: None,
             song_query: None,
+            mpris_message: None,
         }
     }
 
     pub fn handle_events(&mut self) -> Result<()> {
-        match input::handle_events(self) {
+        let message = input::handle_events(self);
+        let result = self.handle_message(message);
+        if let Some(mpris_message) = &self.mpris_message {
+            let mpris_result = self.handle_message(*mpris_message);
+            self.mpris_message = None;
+            result.map_err(|err| {
+                if let Err(mpris_err) = mpris_result {
+                    err.wrap_err(mpris_err)
+                } else {
+                    err
+                }
+            })
+        } else {
+            result
+        }
+    }
+
+    fn handle_message(&mut self, message: Message) -> Result<()> {
+        match message {
             Message::None => {}
             Message::Exit => {
                 self.exit();
@@ -149,8 +170,8 @@ impl App {
                 self.song_query = None;
                 self.songs.unfiltered();
             }
-            Message::Pause(paused) => {
-                if let Err(_) = MpvCommand::TogglePause.run() {
+            Message::PauseToggle(paused) => {
+                if let Err(_) = MpvCommand::TogglePause(paused).run() {
                     self.alert = Some("Error querying MPV for pause information".to_owned());
                 } else {
                     self.paused = paused;

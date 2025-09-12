@@ -18,6 +18,8 @@ use crate::{
 mod app;
 mod files;
 mod input;
+#[cfg(feature = "mpris")]
+mod mpris;
 mod mpv;
 mod songs;
 mod utilities;
@@ -66,10 +68,12 @@ fn main() -> Result<()> {
         thread::sleep(Duration::from_millis(35));
     });
 
+    #[cfg(feature = "mpris")]
+    let handle_mpris: JoinHandle<Result<()>> = mpris::mpris::thread_mpris(app.clone());
+
     let app_ref = app.clone();
     let handle: JoinHandle<Result<()>> = thread::spawn(move || loop {
         let Ok(mut app) = app_ref.try_lock() else {
-            // thread::sleep(Duration::from_millis(35));
             continue;
         };
 
@@ -97,6 +101,12 @@ fn main() -> Result<()> {
         if handle_draw.is_finished() {
             ratatui::restore();
             return handle_draw.join().unwrap();
+        }
+
+        #[cfg(feature = "mpris")]
+        if handle_mpris.is_finished() {
+            ratatui::restore();
+            return handle_mpris.join().unwrap();
         }
 
         thread::sleep(Duration::from_millis(200));
