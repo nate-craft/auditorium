@@ -8,7 +8,7 @@ Auditorium is a cross-platform, local, simple, fast, and distraction free CLI ap
 
 ## Features
 
-- Fetches song metadata for all tracks such as genre(s), artist(s), and title via ffprobe locally
+- Fetches song metadata for all tracks such as genre(s), artist(s), album(s), and title via ffprobe locally
 
 - Plays tracks with the lightweight MPV background audio player
 
@@ -96,6 +96,8 @@ genre(Rock)
 !Metallica
 # Every song, but no rock, metal, nor rap
 !genre(Rock),!genre(Metal),!genre(Rap)
+# Only Bo Burnham, only 'INSIDE' tracks
+Bo Burnham,album(INSIDE)
 ```
 
 ___
