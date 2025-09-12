@@ -26,6 +26,8 @@ pub struct Song {
     pub title: String,
     pub genre: String,
     pub artist: String,
+    pub album: String,
+    pub track: String,
     pub path: PathBuf,
 }
 
@@ -63,6 +65,8 @@ impl Song {
         let mut title: String = "Unknown".to_owned();
         let mut genre: String = "Unknown".to_owned();
         let mut artist: String = "Unknown".to_owned();
+        let mut album: String = "Single".to_owned();
+        let mut track: String = "1".to_owned();
         let path = file_name.to_owned();
 
         probe.format.tags.map(|tags| {
@@ -80,13 +84,43 @@ impl Song {
                 artist_inner.as_str().map(|author_inner| {
                     artist = author_inner.to_owned();
                 });
-            })
+            });
+            tags.extra.get("album").map(|album_inner| {
+                album_inner.as_str().map(|album_inner| {
+                    album = album_inner.to_owned();
+                });
+            });
+            tags.extra.get("track").map(|track_inner| {
+                track_inner.as_str().map(|track_inner| {
+                    let track_raw = track_inner.to_owned();
+                    let split = track_raw.split_once("/");
+                    if let Some(split) = split {
+                        if split.0.starts_with("0") && split.0.len() > 1 {
+                            track = split.0[1..].to_owned();
+                        } else if split.0.starts_with("0") {
+                            track = String::from("0");
+                        } else {
+                            track = split.0.to_owned();
+                        }
+                    } else {
+                        if track_raw.starts_with("0") && track_raw.len() > 1 {
+                            track = track_raw[1..].to_owned();
+                        } else if track_raw.starts_with("0") {
+                            track = String::from("0");
+                        } else {
+                            track = track_raw;
+                        }
+                    }
+                });
+            });
         });
 
         return Ok(Song {
             title,
             genre,
             artist,
+            album,
+            track,
             path,
         });
     }
@@ -115,6 +149,11 @@ impl Song {
             } else if query.starts_with("!genre(") && query.ends_with(")") && query.len() > 9 {
                 let sub_query = query[7..query.len() - 1].to_owned();
                 if self.genre.to_lowercase().contains(&sub_query) {
+                    return false;
+                }
+            } else if query.starts_with("album(") && query.ends_with(")") && query.len() > 8 {
+                let sub_query = query[6..query.len() - 1].to_owned();
+                if !self.album.to_lowercase().contains(&sub_query) {
                     return false;
                 }
             } else if query.starts_with("!") {
@@ -182,6 +221,8 @@ impl Songs {
             first
                 .artist
                 .cmp(&second.artist)
+                .then(first.album.cmp(&second.album))
+                .then(first.track.cmp(&second.track))
                 .then(first.title.cmp(&second.title))
         });
 
