@@ -41,7 +41,8 @@ pub struct App {
     pub click_position: Option<Position>,
     pub alert: Option<String>,
     pub song_query: Option<String>,
-    pub mpris_message: Option<Message>,
+    pub mpris_message_in: Option<Message>,
+    pub mpris_message_out: Option<Message>,
 }
 
 #[derive(Clone, Copy)]
@@ -49,6 +50,7 @@ pub enum Message {
     None,
     Exit,
     PauseToggle(bool),
+    Stop,
     SongNext,
     SongPrevious,
     NavStateNext,
@@ -64,8 +66,8 @@ pub enum Message {
     Find,
     ModifyFind(Option<char>),
     ClearUpNext,
-    SongSeekForward,
-    SongSeekBackward,
+    SongSeekForward(i32),
+    SongSeekBackward(i32),
 }
 
 impl NavState {
@@ -136,16 +138,19 @@ impl App {
             click_position: None,
             alert: None,
             song_query: None,
-            mpris_message: None,
+            mpris_message_in: None,
+            mpris_message_out: None,
         }
     }
 
     pub fn handle_events(&mut self) -> Result<()> {
         let message = input::handle_events(self);
         let result = self.handle_message(message);
-        if let Some(mpris_message) = &self.mpris_message {
+        self.mpris_message_out = Some(message);
+
+        if let Some(mpris_message) = &self.mpris_message_in {
             let mpris_result = self.handle_message(*mpris_message);
-            self.mpris_message = None;
+            self.mpris_message_in = None;
             result.map_err(|err| {
                 if let Err(mpris_err) = mpris_result {
                     err.wrap_err(mpris_err)
@@ -170,6 +175,10 @@ impl App {
                 self.song_query = None;
                 self.songs.unfiltered();
             }
+            Message::Stop => {
+                self.songs.kill_current();
+                self.songs.clear_up_next();
+            }
             Message::PauseToggle(paused) => {
                 if self.songs.song_is_active() {
                     if let Err(_) = MpvCommand::TogglePause(paused).run() {
@@ -179,16 +188,16 @@ impl App {
                     }
                 }
             }
-            Message::SongSeekForward => {
+            Message::SongSeekForward(time) => {
                 if self.songs.song_is_active() {
-                    if let Err(_) = MpvCommand::Seek(5).run() {
+                    if let Err(_) = MpvCommand::Seek(time).run() {
                         self.alert = Some("Error seeking forward with MPV".to_owned());
                     }
                 }
             }
-            Message::SongSeekBackward => {
+            Message::SongSeekBackward(time) => {
                 if self.songs.song_is_active() {
-                    if let Err(_) = MpvCommand::Seek(-5).run() {
+                    if let Err(_) = MpvCommand::Seek(time).run() {
                         self.alert = Some("Error seeking forward with MPV".to_owned());
                     }
                 }
