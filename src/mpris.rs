@@ -5,24 +5,22 @@ pub mod mpris {
     use crate::mpv::MpvCommand;
     use crate::mpv::MpvCommandFeedback;
     use color_eyre::Result;
-    use mpris_server::zbus;
-    use mpris_server::zbus::fdo;
-    use mpris_server::LocalPlayerInterface;
-    use mpris_server::LocalRootInterface;
-    use mpris_server::LocalServer;
     use mpris_server::LoopStatus;
     use mpris_server::Metadata;
     use mpris_server::PlaybackRate;
     use mpris_server::PlaybackStatus;
+    use mpris_server::PlayerInterface;
+    use mpris_server::RootInterface;
+    use mpris_server::Server;
     use mpris_server::Time;
     use mpris_server::TrackId;
     use mpris_server::Volume;
+    use mpris_server::zbus;
+    use mpris_server::zbus::fdo;
     use std::{
         sync::{Arc, Mutex},
         thread::{self, JoinHandle},
     };
-
-    const APP_ID: &'static str = "com.github.nate-craft.Auditorium";
 
     struct AuditoriumPlayer {
         app: Arc<Mutex<App>>,
@@ -30,31 +28,28 @@ pub mod mpris {
 
     impl From<Arc<Mutex<App>>> for AuditoriumPlayer {
         fn from(app: Arc<Mutex<App>>) -> Self {
-            Self {
-                app
-            }
+            Self { app }
         }
     }
 
     pub fn thread_mpris(app: Arc<Mutex<App>>) -> JoinHandle<Result<()>> {
         thread::spawn(move || {
             async_std::task::block_on(async {
-                let server = LocalServer::new(APP_ID, AuditoriumPlayer::from(app)).await?;
-                async_std::task::spawn_local(server.run());
+                let _server = Server::new("auditorium", AuditoriumPlayer::from(app)).await?;
                 async_std::future::pending::<()>().await;
                 Ok(())
-             })
-         })
+            })
+        })
     }
 
-    impl LocalPlayerInterface for AuditoriumPlayer {
+    impl PlayerInterface for AuditoriumPlayer {
         async fn next(&self) -> fdo::Result<()> {
             loop {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
                 app.mpris_message_in = Some(Message::SongNext);
-                break; 
+                break;
             }
             Ok(())
         }
@@ -65,9 +60,9 @@ pub mod mpris {
                     continue;
                 };
                 app.mpris_message_in = Some(Message::SongPrevious);
-                break; 
+                break;
             }
-            Ok(())           
+            Ok(())
         }
 
         async fn pause(&self) -> fdo::Result<()> {
@@ -76,18 +71,18 @@ pub mod mpris {
                     continue;
                 };
                 app.mpris_message_in = Some(Message::PauseToggle(true));
-                break; 
+                break;
             }
             Ok(())
         }
 
         async fn play_pause(&self) -> fdo::Result<()> {
-             loop {
+            loop {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
                 app.mpris_message_in = Some(Message::PauseToggle(!app.paused));
-                break; 
+                break;
             }
             Ok(())
         }
@@ -98,7 +93,7 @@ pub mod mpris {
                     continue;
                 };
                 app.mpris_message_in = Some(Message::Stop);
-                break; 
+                break;
             }
             Ok(())
         }
@@ -109,7 +104,7 @@ pub mod mpris {
                     continue;
                 };
                 app.mpris_message_in = Some(Message::PauseToggle(false));
-                break; 
+                break;
             }
             Ok(())
         }
@@ -121,17 +116,19 @@ pub mod mpris {
                 };
                 if time.is_negative() {
                     app.mpris_message_in = Some(Message::SongSeekBackward(time.as_secs() as i32));
-                } else {                           
+                } else {
                     app.mpris_message_in = Some(Message::SongSeekForward(time.as_secs() as i32));
                 }
-                
-                break; 
+
+                break;
             }
             Ok(())
         }
 
         async fn set_position(&self, _: TrackId, _: Time) -> fdo::Result<()> {
-            Err(fdo::Error::NotSupported("SetPosition is not supported".into()))
+            Err(fdo::Error::NotSupported(
+                "SetPosition is not supported".into(),
+            ))
         }
 
         async fn open_uri(&self, _: String) -> fdo::Result<()> {
@@ -151,7 +148,7 @@ pub mod mpris {
                 match app.paused {
                     true => return Ok(PlaybackStatus::Paused),
                     false => return Ok(PlaybackStatus::Playing),
-                }            
+                }
             }
         }
 
@@ -160,7 +157,9 @@ pub mod mpris {
         }
 
         async fn set_loop_status(&self, _: LoopStatus) -> zbus::Result<()> {
-            Err(zbus::Error::from(fdo::Error::NotSupported("SetLoopStatus is not supported".into())))
+            Err(zbus::Error::from(fdo::Error::NotSupported(
+                "SetLoopStatus is not supported".into(),
+            )))
         }
 
         async fn rate(&self) -> fdo::Result<PlaybackRate> {
@@ -168,7 +167,9 @@ pub mod mpris {
         }
 
         async fn set_rate(&self, _: PlaybackRate) -> zbus::Result<()> {
-            Err(zbus::Error::from(fdo::Error::NotSupported("SetRate is not supported".into())))
+            Err(zbus::Error::from(fdo::Error::NotSupported(
+                "SetRate is not supported".into(),
+            )))
         }
 
         async fn shuffle(&self) -> fdo::Result<bool> {
@@ -176,7 +177,9 @@ pub mod mpris {
         }
 
         async fn set_shuffle(&self, _: bool) -> zbus::Result<()> {
-            Err(zbus::Error::from(fdo::Error::NotSupported("SetShuffle is not supported".into())))
+            Err(zbus::Error::from(fdo::Error::NotSupported(
+                "SetShuffle is not supported".into(),
+            )))
         }
 
         async fn metadata(&self) -> fdo::Result<Metadata> {
@@ -186,24 +189,28 @@ pub mod mpris {
                 };
 
                 match app.songs.current_song() {
-                    Some(song) => return Ok(Metadata::builder()
-                        .artist(vec![song.artist.clone()])
-                        .album(song.album.clone())
-                        .genre(vec![song.genre.clone()])
-                        .title(song.title.clone())
-                        .track_number(song.track.parse().unwrap_or(0))
-                        .build()),
+                    Some(song) => {
+                        return Ok(Metadata::builder()
+                            .artist(vec![song.artist.clone()])
+                            .album(song.album.clone())
+                            .genre(vec![song.genre.clone()])
+                            .title(song.title.clone())
+                            .track_number(song.track.parse().unwrap_or(0))
+                            .build());
+                    }
                     None => return Err(fdo::Error::Failed("No song playing".to_owned())),
                 }
-            }            
+            }
         }
-        
+
         async fn volume(&self) -> fdo::Result<Volume> {
             Ok(1.0)
         }
 
         async fn set_volume(&self, _: Volume) -> zbus::Result<()> {
-            Err(zbus::Error::from(fdo::Error::NotSupported("SetVolume is not supported".into())))
+            Err(zbus::Error::from(fdo::Error::NotSupported(
+                "SetVolume is not supported".into(),
+            )))
         }
 
         async fn position(&self) -> fdo::Result<Time> {
@@ -212,9 +219,11 @@ pub mod mpris {
                     if let MpvCommandFeedback::Int(position) = result {
                         Ok(Time::from_secs(position as i64))
                     } else {
-                        Err(fdo::Error::Failed("Critial error: MPV get position returning incorrect type".to_owned()))
+                        Err(fdo::Error::Failed(
+                            "Critial error: MPV get position returning incorrect type".to_owned(),
+                        ))
                     }
-                },
+                }
                 Err(err) => Err(fdo::Error::Failed(err.to_string())),
             }
         }
@@ -257,8 +266,7 @@ pub mod mpris {
         }
     }
 
-
-    impl LocalRootInterface for AuditoriumPlayer{
+    impl RootInterface for AuditoriumPlayer {
         async fn raise(&self) -> fdo::Result<()> {
             Ok(())
         }
@@ -282,7 +290,9 @@ pub mod mpris {
         }
 
         async fn set_fullscreen(&self, _: bool) -> zbus::Result<()> {
-            Err(zbus::Error::from(fdo::Error::NotSupported("Fullscreen is not supported".into())))
+            Err(zbus::Error::from(fdo::Error::NotSupported(
+                "Fullscreen is not supported".into(),
+            )))
         }
 
         async fn can_set_fullscreen(&self) -> fdo::Result<bool> {
@@ -290,7 +300,7 @@ pub mod mpris {
         }
 
         async fn can_raise(&self) -> fdo::Result<bool> {
-            Ok(false)
+            Ok(true)
         }
 
         async fn has_track_list(&self) -> fdo::Result<bool> {
@@ -302,7 +312,9 @@ pub mod mpris {
         }
 
         async fn desktop_entry(&self) -> fdo::Result<String> {
-            Ok(APP_ID.into())
+            Err(fdo::Error::NotSupported(String::from(
+                "Desktop shortcut not available",
+            )))
         }
 
         async fn supported_uri_schemes(&self) -> fdo::Result<Vec<String>> {
@@ -314,4 +326,3 @@ pub mod mpris {
         }
     }
 }
-
