@@ -301,10 +301,11 @@ impl App {
     }
 
     pub fn handle_song_state(&mut self) -> Result<()> {
+        let exists = self.songs.active_exists();
         let running = self.songs.song_is_running();
         let active = self.songs.active_command_mut();
 
-        if active.marked_dead {
+        if active.marked_dead || (exists && !running) {
             // Manually killed
             self.songs.next(&self.song_state);
             self.song_state = SongLoadingState::Forward;

@@ -72,13 +72,25 @@ impl ActiveSong {
 
     fn try_kill(&mut self) -> Result<(), io::Error> {
         self.marked_dead = true;
+        let result = self
+            .child
+            .as_mut()
+            .map(|child| {
+                let result = if let Err(err) = child.kill().map(|_| ()) {
+                    Err(err)
+                } else {
+                    child.wait().map(|_| ())
+                };
 
-        if let Some(child) = self.child.as_mut() {
-            child.kill()?;
-            return child.wait().map(|_| ());
+                result
+            })
+            .unwrap_or(Ok(()));
+
+        if result.is_ok() {
+            self.child = None;
         }
 
-        Ok(())
+        result
     }
 
     fn is_running(&mut self) -> bool {
@@ -447,6 +459,10 @@ impl Songs {
             self.songs_history.remove(self.songs_history.len() - 1);
             self.songs_next.insert(0, previous);
         }
+    }
+
+    pub fn active_exists(&self) -> bool {
+        self.active.child.is_some()
     }
 
     pub fn active_command_mut(&mut self) -> &mut ActiveSong {
