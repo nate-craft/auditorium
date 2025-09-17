@@ -1,11 +1,14 @@
-use color_eyre::Result;
+use color_eyre::{Result, eyre::Error};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Flex, Layout, Position, Rect},
     style::{Style, Stylize},
     widgets::{Block, BorderType, Borders, Clear, TableState},
-    Frame,
 };
-use std::cmp::{max, min};
+use std::{
+    cmp::{max, min},
+    sync::mpsc::{self, Receiver, Sender},
+};
 
 use crate::{
     files::Config,
@@ -41,11 +44,10 @@ pub struct App {
     pub click_position: Option<Position>,
     pub alert: Option<String>,
     pub song_query: Option<String>,
-    pub mpris_message_in: Option<Message>,
-    pub mpris_message_out: Option<Message>,
+    pub mpris_message_out: (Sender<Message>, Receiver<Message>),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Message {
     None,
     Exit,
@@ -66,17 +68,12 @@ pub enum Message {
     Find,
     ModifyFind(Option<char>),
     ClearUpNext,
-    SongSeekForward(i32),
-    SongSeekBackward(i32),
+    SongSeek(i32),
 }
 
 impl NavState {
     pub fn rows_per_skip(is_single_row: bool) -> usize {
-        if is_single_row {
-            1
-        } else {
-            10
-        }
+        if is_single_row { 1 } else { 10 }
     }
 
     pub fn event_list_up(&mut self, is_single: bool, num_entries: usize) {
@@ -138,29 +135,51 @@ impl App {
             click_position: None,
             alert: None,
             song_query: None,
-            mpris_message_in: None,
-            mpris_message_out: None,
+            mpris_message_out: mpsc::channel(),
         }
     }
 
     pub fn handle_events(&mut self) -> Result<()> {
-        let message = input::handle_events(self);
-        let result = self.handle_message(message);
-        self.mpris_message_out = Some(message);
+        let message = input::handle_input(self);
 
-        if let Some(mpris_message) = &self.mpris_message_in {
-            let mpris_result = self.handle_message(*mpris_message);
-            self.mpris_message_in = None;
-            result.map_err(|err| {
-                if let Err(mpris_err) = mpris_result {
-                    err.wrap_err(mpris_err)
-                } else {
-                    err
-                }
-            })
-        } else {
-            result
+        let result_handle = self
+            .handle_message(message)
+            .map_err(|err| Error::msg(err.to_string()));
+        let result_state = self.handle_song_state();
+
+        // Need to wait to send mpris update till song state is setup
+        match message {
+            Message::None | Message::Escape => {}
+            _ => {
+                self.mpris_message_out.0.send(message)?;
+            }
         }
+
+        Self::result_concat([result_handle, result_state])
+    }
+
+    pub fn handle_message_mpris(&mut self, message: Message) -> Result<()> {
+        let result_mpris = self
+            .mpris_message_out
+            .0
+            .send(message)
+            .map_err(|err| Error::new(err));
+        let result_handle = self
+            .handle_message(message)
+            .map_err(|err| Error::msg(err.to_string()));
+        let result_state = self.handle_song_state();
+
+        Self::result_concat([result_mpris, result_handle, result_state])
+    }
+
+    fn result_concat<const N: usize>(results: [Result<()>; N]) -> Result<()> {
+        results
+            .into_iter()
+            .filter_map(|result| result.err())
+            .fold(Ok(()), |acc, added| match acc {
+                Ok(_) => Err(added),
+                Err(err) => Err(err.wrap_err(added)),
+            })
     }
 
     fn handle_message(&mut self, message: Message) -> Result<()> {
@@ -180,7 +199,7 @@ impl App {
                 self.songs.clear_up_next();
             }
             Message::PauseToggle(paused) => {
-                if self.songs.song_is_active() {
+                if self.songs.song_is_running() {
                     if let Err(_) = MpvCommand::TogglePause(paused).run() {
                         self.alert = Some("Error querying MPV for pause information".to_owned());
                     } else {
@@ -188,15 +207,8 @@ impl App {
                     }
                 }
             }
-            Message::SongSeekForward(time) => {
-                if self.songs.song_is_active() {
-                    if let Err(_) = MpvCommand::Seek(time).run() {
-                        self.alert = Some("Error seeking forward with MPV".to_owned());
-                    }
-                }
-            }
-            Message::SongSeekBackward(time) => {
-                if self.songs.song_is_active() {
+            Message::SongSeek(time) => {
+                if self.songs.song_is_running() {
                     if let Err(_) = MpvCommand::Seek(time).run() {
                         self.alert = Some("Error seeking forward with MPV".to_owned());
                     }
@@ -289,28 +301,27 @@ impl App {
     }
 
     pub fn handle_song_state(&mut self) -> Result<()> {
-        match self.songs.active_command_mut() {
-            None => {
-                match self.song_state {
-                    SongLoadingState::Backward => {
-                        self.songs.skip_backward();
-                    }
-                    SongLoadingState::Forward => {
-                        self.songs.try_play_current_song();
-                    }
-                }
+        let running = self.songs.song_is_running();
+        let active = self.songs.active_command_mut();
 
-                self.song_state = SongLoadingState::Forward;
-            }
-            Some(active) => {
-                let status = active.try_wait()?;
-                if status.is_some() {
-                    self.songs.next(&self.song_state);
-                    self.song_state = SongLoadingState::Forward;
-                    self.paused = false;
-                    self.songs.try_play_current_song();
+        if active.marked_dead {
+            // Manually killed
+            self.songs.next(&self.song_state);
+            self.song_state = SongLoadingState::Forward;
+            self.paused = false;
+            self.songs.try_play_current_song()?;
+        } else if !running {
+            // Nothing playing yet
+            match self.song_state {
+                SongLoadingState::Backward => {
+                    self.songs.previous();
+                }
+                SongLoadingState::Forward => {
+                    self.songs.try_play_current_song()?;
                 }
             }
+
+            self.song_state = SongLoadingState::Forward;
         }
 
         return Ok(());

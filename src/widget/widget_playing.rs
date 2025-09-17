@@ -5,10 +5,10 @@ use ratatui::{
     widgets::{Block, BorderType, Paragraph},
 };
 
-use crate::mpv::MpvCommand;
-use crate::mpv::MpvCommandFeedback;
 use crate::App;
 use crate::NavState;
+use crate::mpv::MpvCommand;
+use crate::mpv::MpvCommandFeedback;
 
 pub fn build<'a>(app: &mut App) -> Paragraph<'a> {
     let mut widget_playing = {
@@ -34,7 +34,7 @@ pub fn build<'a>(app: &mut App) -> Paragraph<'a> {
 
     let player_title = {
         let prefix = if app.paused { " Paused " } else { " Playing " };
-        if app.songs.song_is_active() {
+        if app.songs.song_is_running() {
             if let Ok(feedback) = MpvCommand::GetProgress.run() {
                 if let MpvCommandFeedback::String(progress) = feedback {
                     format!("{}{} ", prefix, progress)

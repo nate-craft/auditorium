@@ -1,6 +1,7 @@
 use std::{
     fs::File,
     io::{self, BufReader, Write},
+    option::Option,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
@@ -18,8 +19,8 @@ use ratatui::crossterm::style::Stylize;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
+use crate::{MPV_SOCKET, files};
 use crate::{app::SongLoadingState, files::Config};
-use crate::{files, MPV_SOCKET};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Song {
@@ -31,17 +32,63 @@ pub struct Song {
     pub path: PathBuf,
 }
 
+pub struct ActiveSong {
+    pub child: Option<Child>,
+    pub marked_dead: bool,
+}
+
 pub struct Songs {
     pub showing_songs_library: SongList,
     songs_data_library: Vec<Song>,
     songs_next: Vec<usize>,
     songs_history: Vec<usize>,
-    active: Option<Child>,
+    active: ActiveSong,
 }
 
 pub enum SongList {
     All,
     Filtered(Vec<usize>),
+}
+
+impl ActiveSong {
+    fn new() -> ActiveSong {
+        ActiveSong {
+            child: None,
+            marked_dead: false,
+        }
+    }
+
+    fn with_song(song: Option<&Song>) -> Result<ActiveSong, io::Error> {
+        let child = match song {
+            Some(song) => Some(song.play_single()?),
+            None => None,
+        };
+
+        Ok(ActiveSong {
+            child,
+            marked_dead: false,
+        })
+    }
+
+    fn try_kill(&mut self) -> Result<(), io::Error> {
+        self.marked_dead = true;
+
+        if let Some(child) = self.child.as_mut() {
+            child.kill()?;
+            return child.wait().map(|_| ());
+        }
+
+        Ok(())
+    }
+
+    fn is_running(&mut self) -> bool {
+        if let Some(active) = &mut self.child.as_mut() {
+            if let Ok(status) = active.try_wait() {
+                return status.is_none();
+            }
+        }
+        return false;
+    }
 }
 
 impl SongList {
@@ -194,7 +241,7 @@ impl Songs {
             showing_songs_library: SongList::All,
             songs_next: Vec::new(),
             songs_history: Vec::new(),
-            active: None,
+            active: ActiveSong::new(),
         };
 
         if songs.songs_data_library.is_empty() {
@@ -359,18 +406,11 @@ impl Songs {
     }
 
     pub fn kill_current(&mut self) {
-        if let Some(active) = &mut self.active {
-            let _ = active.kill();
-        }
+        let _ = self.active.try_kill();
     }
 
-    pub fn song_is_active(&mut self) -> bool {
-        if let Some(active) = &mut self.active {
-            if let Ok(status) = active.try_wait() {
-                return status.is_none();
-            }
-        }
-        return false;
+    pub fn song_is_running(&mut self) -> bool {
+        return self.active.is_running();
     }
 
     pub fn last_played_index(&self) -> Option<usize> {
@@ -397,21 +437,20 @@ impl Songs {
         self.songs_next.insert(1, selected);
     }
 
-    pub fn try_play_current_song(&mut self) {
-        self.active = self
-            .current_song()
-            .map(|process| process.play_single().unwrap());
+    pub fn try_play_current_song(&mut self) -> Result<(), io::Error> {
+        self.active = ActiveSong::with_song(self.current_song())?;
+        Ok(())
     }
 
-    pub fn skip_backward(&mut self) {
+    pub fn previous(&mut self) {
         if let Some(previous) = self.last_played_index() {
             self.songs_history.remove(self.songs_history.len() - 1);
             self.songs_next.insert(0, previous);
         }
     }
 
-    pub fn active_command_mut(&mut self) -> Option<&mut Child> {
-        self.active.as_mut()
+    pub fn active_command_mut(&mut self) -> &mut ActiveSong {
+        &mut self.active
     }
 
     pub fn songs_in_library(&self) -> usize {

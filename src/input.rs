@@ -11,7 +11,7 @@ use crate::app::App;
 use crate::app::Message;
 use crate::app::NavState;
 
-pub fn handle_events(app: &mut App) -> Message {
+pub fn handle_input(app: &mut App) -> Message {
     let event;
     if event::poll(Duration::new(0, 10000)).unwrap() {
         event = event::read().unwrap();
@@ -69,8 +69,8 @@ pub fn handle_events(app: &mut App) -> Message {
             KeyCode::Char(' ') => return Message::PauseToggle(!app.paused),
             KeyCode::Char('>') | KeyCode::Char('n') => return Message::SongNext,
             KeyCode::Char('<') | KeyCode::Char('p') => return Message::SongPrevious,
-            KeyCode::Right => return Message::SongSeekForward(5),
-            KeyCode::Left => return Message::SongSeekBackward(-5),
+            KeyCode::Right => return Message::SongSeek(5),
+            KeyCode::Left => return Message::SongSeek(-5),
             KeyCode::Char('a') => return Message::PlayAll,
             KeyCode::BackTab => return Message::NavStatePrev,
             KeyCode::Tab => return Message::NavStateNext,

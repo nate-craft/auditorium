@@ -2,16 +2,20 @@
 pub mod mpris {
     use crate::app::App;
     use crate::app::Message;
+    use crate::app::NavState;
     use crate::mpv::MpvCommand;
     use crate::mpv::MpvCommandFeedback;
     use color_eyre::Result;
+
     use mpris_server::LoopStatus;
     use mpris_server::Metadata;
     use mpris_server::PlaybackRate;
     use mpris_server::PlaybackStatus;
     use mpris_server::PlayerInterface;
+    use mpris_server::Property;
     use mpris_server::RootInterface;
     use mpris_server::Server;
+
     use mpris_server::Time;
     use mpris_server::TrackId;
     use mpris_server::Volume;
@@ -32,12 +36,92 @@ pub mod mpris {
         }
     }
 
+    fn metadata_current(app: &App) -> Option<Metadata> {
+        app.songs.current_song().map(|song| {
+            Metadata::builder()
+                .artist(vec![song.artist.clone()])
+                .album(song.album.clone())
+                .genre(vec![song.genre.clone()])
+                .title(song.title.clone())
+                .track_number(song.track.parse().unwrap_or(0))
+                .build()
+        })
+    }
+
+    fn paused_current(app: &App, paused: bool) -> PlaybackStatus {
+        if app.songs.current_song().is_some() {
+            if paused {
+                PlaybackStatus::Paused
+            } else {
+                PlaybackStatus::Playing
+            }
+        } else {
+            PlaybackStatus::Stopped
+        }
+    }
+
     pub fn thread_mpris(app: Arc<Mutex<App>>) -> JoinHandle<Result<()>> {
         thread::spawn(move || {
             async_std::task::block_on(async {
-                let _server = Server::new("auditorium", AuditoriumPlayer::from(app)).await?;
-                async_std::future::pending::<()>().await;
-                Ok(())
+                let app_ref = app.clone();
+                let server = Server::new("auditorium", AuditoriumPlayer::from(app_ref)).await?;
+
+                loop {
+                    let Ok(app) = app.try_lock() else {
+                        continue;
+                    };
+
+                    if app.nav_state == NavState::Exit {
+                        return Ok(());
+                    }
+
+                    let mut messages = Vec::new();
+                    while let Ok(msg) = app.mpris_message_out.1.try_recv() {
+                        messages.push(msg);
+                    }
+
+                    for msg in messages.into_iter() {
+                        match msg {
+                            Message::Exit => return Ok(()),
+                            Message::PauseToggle(paused) => {
+                                server
+                                    .properties_changed([Property::PlaybackStatus(paused_current(
+                                        &app, paused,
+                                    ))])
+                                    .await?;
+                            }
+                            Message::Stop => {
+                                server
+                                    .properties_changed([Property::PlaybackStatus(
+                                        PlaybackStatus::Stopped,
+                                    )])
+                                    .await?;
+                            }
+                            Message::SongNext
+                            | Message::PlayAll
+                            | Message::SongPrevious
+                            | Message::ReloadMusic
+                            | Message::MoveSong => {
+                                if let Some(metadata) = metadata_current(&app) {
+                                    server
+                                        .properties_changed([Property::Metadata(metadata)])
+                                        .await?;
+                                } else {
+                                    server
+                                        .properties_changed([Property::Metadata(Metadata::new())])
+                                        .await?;
+                                }
+
+                                server
+                                    .properties_changed([Property::PlaybackStatus(paused_current(
+                                        &app, app.paused,
+                                    ))])
+                                    .await?;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
             })
         })
     }
@@ -48,10 +132,11 @@ pub mod mpris {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
-                app.mpris_message_in = Some(Message::SongNext);
-                break;
+
+                return app
+                    .handle_message_mpris(Message::SongNext)
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
             }
-            Ok(())
         }
 
         async fn previous(&self) -> fdo::Result<()> {
@@ -59,10 +144,11 @@ pub mod mpris {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
-                app.mpris_message_in = Some(Message::SongPrevious);
-                break;
+
+                return app
+                    .handle_message_mpris(Message::SongPrevious)
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
             }
-            Ok(())
         }
 
         async fn pause(&self) -> fdo::Result<()> {
@@ -70,10 +156,11 @@ pub mod mpris {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
-                app.mpris_message_in = Some(Message::PauseToggle(true));
-                break;
+
+                return app
+                    .handle_message_mpris(Message::PauseToggle(true))
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
             }
-            Ok(())
         }
 
         async fn play_pause(&self) -> fdo::Result<()> {
@@ -81,10 +168,13 @@ pub mod mpris {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
-                app.mpris_message_in = Some(Message::PauseToggle(!app.paused));
-                break;
+
+                let paused = !app.paused;
+
+                return app
+                    .handle_message_mpris(Message::PauseToggle(paused))
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
             }
-            Ok(())
         }
 
         async fn stop(&self) -> fdo::Result<()> {
@@ -92,10 +182,11 @@ pub mod mpris {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
-                app.mpris_message_in = Some(Message::Stop);
-                break;
+
+                return app
+                    .handle_message_mpris(Message::Stop)
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
             }
-            Ok(())
         }
 
         async fn play(&self) -> fdo::Result<()> {
@@ -103,10 +194,16 @@ pub mod mpris {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
-                app.mpris_message_in = Some(Message::PauseToggle(false));
-                break;
+
+                let result = if app.songs.current_song().is_some() {
+                    app.handle_message_mpris(Message::PauseToggle(false))
+                } else {
+                    app.handle_message_mpris(Message::PlayAll)
+                };
+
+                return result
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
             }
-            Ok(())
         }
 
         async fn seek(&self, time: Time) -> fdo::Result<()> {
@@ -114,15 +211,11 @@ pub mod mpris {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
-                if time.is_negative() {
-                    app.mpris_message_in = Some(Message::SongSeekBackward(time.as_secs() as i32));
-                } else {
-                    app.mpris_message_in = Some(Message::SongSeekForward(time.as_secs() as i32));
-                }
 
-                break;
+                return app
+                    .handle_message_mpris(Message::SongSeek(time.as_secs() as i32))
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
             }
-            Ok(())
         }
 
         async fn set_position(&self, _: TrackId, _: Time) -> fdo::Result<()> {
@@ -188,18 +281,8 @@ pub mod mpris {
                     continue;
                 };
 
-                match app.songs.current_song() {
-                    Some(song) => {
-                        return Ok(Metadata::builder()
-                            .artist(vec![song.artist.clone()])
-                            .album(song.album.clone())
-                            .genre(vec![song.genre.clone()])
-                            .title(song.title.clone())
-                            .track_number(song.track.parse().unwrap_or(0))
-                            .build());
-                    }
-                    None => return Err(fdo::Error::Failed("No song playing".to_owned())),
-                }
+                return metadata_current(&app)
+                    .ok_or(fdo::Error::Failed("No song playing".to_owned()));
             }
         }
 
@@ -245,24 +328,19 @@ pub mod mpris {
         }
 
         async fn can_play(&self) -> fdo::Result<bool> {
-            loop {
-                let Ok(app) = self.app.try_lock() else {
-                    continue;
-                };
-                return Ok(app.songs.current_song().is_some());
-            }
+            return Ok(true);
         }
 
         async fn can_pause(&self) -> fdo::Result<bool> {
-            return self.can_play().await;
+            return Ok(true);
         }
 
         async fn can_seek(&self) -> fdo::Result<bool> {
-            return self.can_play().await;
+            return Ok(true);
         }
 
         async fn can_control(&self) -> fdo::Result<bool> {
-            return self.can_play().await;
+            return Ok(true);
         }
     }
 
@@ -276,8 +354,10 @@ pub mod mpris {
                 let Ok(mut app) = self.app.try_lock() else {
                     continue;
                 };
-                app.mpris_message_in = Some(Message::Exit);
-                return Ok(());
+
+                return app
+                    .handle_message_mpris(Message::Exit)
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
             }
         }
 

@@ -1,5 +1,5 @@
-use clap::{arg, command, Parser};
-use color_eyre::{eyre::Error, Result};
+use clap::{Parser, arg, command};
+use color_eyre::{Result, eyre::Error};
 use crossterm::ExecutableCommand;
 use std::{
     io::{self},
@@ -48,67 +48,74 @@ fn main() -> Result<()> {
     terminal.clear().unwrap();
 
     let app_ref = app.clone();
-    let handle_draw: JoinHandle<Result<()>> = thread::spawn(move || loop {
-        let Ok(mut app) = app_ref.try_lock() else {
-            continue;
-        };
+    let handle_draw: JoinHandle<Result<()>> = thread::spawn(move || {
+        loop {
+            let Ok(mut app) = app_ref.try_lock() else {
+                continue;
+            };
 
-        if app.nav_state == NavState::Exit {
-            return Ok(());
+            if app.nav_state == NavState::Exit {
+                return Ok(());
+            }
+
+            if let Err(err) = terminal
+                .draw(|frame| app.draw(frame))
+                .map_err(|err| Error::new(err))
+            {
+                return Err(err);
+            }
+
+            thread::sleep(Duration::from_millis(17));
         }
-
-        if let Err(err) = terminal
-            .draw(|frame| app.draw(frame))
-            .map_err(|err| Error::new(err))
-        {
-            app.exit();
-            return Err(err);
-        }
-
-        thread::sleep(Duration::from_millis(35));
     });
 
     #[cfg(feature = "mpris")]
     let handle_mpris: JoinHandle<Result<()>> = mpris::mpris::thread_mpris(app.clone());
 
     let app_ref = app.clone();
-    let handle: JoinHandle<Result<()>> = thread::spawn(move || loop {
-        let Ok(mut app) = app_ref.try_lock() else {
-            continue;
-        };
+    let handle: JoinHandle<Result<()>> = thread::spawn(move || {
+        loop {
+            let Ok(mut app) = app_ref.try_lock() else {
+                continue;
+            };
 
-        if app.nav_state == NavState::Exit {
-            return Ok(());
-        }
+            if app.nav_state == NavState::Exit {
+                return Ok(());
+            }
 
-        if let Err(err) = app.handle_events() {
-            app.exit();
-            return Err(err);
-        }
-
-        if let Err(err) = app.handle_song_state() {
-            app.exit();
-            return Err(err);
+            if let Err(err) = app.handle_events() {
+                return Err(err);
+            }
         }
     });
 
+    let app = app.clone();
     loop {
         if handle.is_finished() {
-            ratatui::restore();
-            return handle.join().unwrap();
+            return exit(app, handle);
         }
 
         if handle_draw.is_finished() {
-            ratatui::restore();
-            return handle_draw.join().unwrap();
+            return exit(app, handle_draw);
         }
 
         #[cfg(feature = "mpris")]
         if handle_mpris.is_finished() {
-            ratatui::restore();
-            return handle_mpris.join().unwrap();
+            return exit(app, handle_mpris);
         }
 
         thread::sleep(Duration::from_millis(200));
+    }
+}
+
+fn exit(app: Arc<Mutex<App>>, handle: JoinHandle<Result<()>>) -> Result<()> {
+    loop {
+        let Ok(mut app) = app.try_lock() else {
+            continue;
+        };
+
+        app.exit();
+        ratatui::restore();
+        return handle.join().unwrap();
     }
 }
