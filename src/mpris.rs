@@ -62,7 +62,8 @@ pub mod mpris {
 
     pub fn thread_mpris(app: Arc<Mutex<App>>) -> JoinHandle<Result<()>> {
         thread::spawn(move || {
-            async_std::task::block_on(async {
+            smol::block_on(async {
+                // smol::task::block_on(async {
                 let app_ref = app.clone();
                 let server = Server::new("auditorium", AuditoriumPlayer::from(app_ref)).await?;
 

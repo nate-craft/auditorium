@@ -47,7 +47,7 @@ pub struct App {
     pub mpris_message_out: (Sender<Message>, Receiver<Message>),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub enum Message {
     None,
     Exit,
