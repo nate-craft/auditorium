@@ -1,8 +1,9 @@
 use clap::{Parser, arg, command};
 use color_eyre::{Result, eyre::Error};
 use crossterm::ExecutableCommand;
+use ratatui::{Terminal, prelude::CrosstermBackend};
 use std::{
-    io::{self},
+    io::{self, Stdout},
     path::PathBuf,
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
@@ -42,15 +43,57 @@ fn main() -> Result<()> {
     let cache_path = files::cache_path()?;
     let songs = Songs::new(&config, &cache_path)?;
     let app = Arc::new(Mutex::new(App::new(songs, config)));
-    let mut terminal = ratatui::init();
+
+    let mut handles = threads(app.clone(), ratatui::init());
 
     io::stdout().execute(crossterm::event::EnableMouseCapture)?;
-    terminal.clear().unwrap();
 
-    let app_ref = app.clone();
-    let handle_draw: JoinHandle<Result<()>> = thread::spawn(move || {
+    loop {
+        for handle_option in handles
+            .iter_mut()
+            .filter(|handle| handle.as_ref().is_some_and(|handle| handle.is_finished()))
+        {
+            if let Some(handle) = handle_option.take() {
+                ratatui::restore();
+                return generate_results(handle.join().unwrap(), handles);
+            }
+        }
+
+        thread::sleep(Duration::from_millis(200));
+    }
+}
+
+#[cfg(feature = "mpris")]
+fn threads(
+    app: Arc<Mutex<App>>,
+    terminal: Terminal<CrosstermBackend<Stdout>>,
+) -> [Option<JoinHandle<Result<()>>>; 3] {
+    [
+        Some(thread_draw(app.clone(), terminal)),
+        Some(thread_events(app.clone())),
+        Some(mpris::mpris::thread_mpris(app.clone())),
+    ]
+}
+
+#[cfg(not(feature = "mpris"))]
+fn threads(
+    app: Arc<Mutex<App>>,
+    terminal: Terminal<CrosstermBackend<Stdout>>,
+) -> [Option<JoinHandle<Result<()>>>; 3] {
+    [
+        Some(thread_draw(app.clone(), terminal)),
+        Some(thread_events(app.clone())),
+        None,
+    ]
+}
+
+fn thread_draw(
+    app: Arc<Mutex<App>>,
+    mut terminal: Terminal<CrosstermBackend<Stdout>>,
+) -> JoinHandle<Result<()>> {
+    thread::spawn(move || {
         loop {
-            let Ok(mut app) = app_ref.try_lock() else {
+            let Ok(mut app) = app.try_lock() else {
                 continue;
             };
 
@@ -62,20 +105,19 @@ fn main() -> Result<()> {
                 .draw(|frame| app.draw(frame))
                 .map_err(|err| Error::new(err))
             {
+                app.exit();
                 return Err(err);
             }
 
             thread::sleep(Duration::from_millis(17));
         }
-    });
+    })
+}
 
-    #[cfg(feature = "mpris")]
-    let handle_mpris: JoinHandle<Result<()>> = mpris::mpris::thread_mpris(app.clone());
-
-    let app_ref = app.clone();
-    let handle: JoinHandle<Result<()>> = thread::spawn(move || {
+fn thread_events(app: Arc<Mutex<App>>) -> JoinHandle<Result<()>> {
+    thread::spawn(move || {
         loop {
-            let Ok(mut app) = app_ref.try_lock() else {
+            let Ok(mut app) = app.try_lock() else {
                 continue;
             };
 
@@ -84,38 +126,29 @@ fn main() -> Result<()> {
             }
 
             if let Err(err) = app.handle_events() {
+                app.exit();
                 return Err(err);
             }
         }
-    });
-
-    let app = app.clone();
-    loop {
-        if handle.is_finished() {
-            return exit(app, handle);
-        }
-
-        if handle_draw.is_finished() {
-            return exit(app, handle_draw);
-        }
-
-        #[cfg(feature = "mpris")]
-        if handle_mpris.is_finished() {
-            return exit(app, handle_mpris);
-        }
-
-        thread::sleep(Duration::from_millis(200));
-    }
+    })
 }
 
-fn exit(app: Arc<Mutex<App>>, handle: JoinHandle<Result<()>>) -> Result<()> {
-    loop {
-        let Ok(mut app) = app.try_lock() else {
-            continue;
-        };
+fn generate_results<const N: usize>(
+    mut result_sum: Result<()>,
+    handles: [Option<JoinHandle<Result<()>>>; N],
+) -> Result<()> {
+    for handle in handles.into_iter().filter_map(|handle| handle) {
+        let handle_joined = handle
+            .join()
+            .unwrap_or(Err(Error::msg("Could not join handle")));
 
-        app.exit();
-        ratatui::restore();
-        return handle.join().unwrap();
+        if let Err(err) = handle_joined {
+            result_sum = match result_sum {
+                Ok(_) => Err(err),
+                Err(existing) => Err(existing.wrap_err(err)),
+            };
+        }
     }
+
+    result_sum
 }

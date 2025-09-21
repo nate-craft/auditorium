@@ -1,6 +1,6 @@
 [package]
 name = "auditorium"
-version = "1.1.5"
+version = "1.1.6"
 edition = "2024"
 
 [dependencies]
@@ -22,3 +22,7 @@ textwrap = "0.16.2"
 [features]
 default = []
 mpris = ["mpris-server", "smol"]
+
+# do not send feature-gated unused warnings for end-users
+[profile.release.package."*"]
+lints = { unused = "allow" }
