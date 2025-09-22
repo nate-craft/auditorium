@@ -192,7 +192,7 @@ impl App {
             Message::Escape => {
                 self.alert = None;
                 self.song_query = None;
-                self.songs.unfiltered();
+                self.songs.unfiltered_apply();
             }
             Message::Stop => {
                 self.songs.kill_current();
@@ -242,7 +242,7 @@ impl App {
             }
             Message::Find => {
                 self.song_query = Some("".to_owned());
-                self.songs.filtered(self.song_query.as_ref());
+                self.songs.filter_apply(self.song_query.as_ref());
                 self.set_nav_state(NavState::Search);
             }
             Message::ModifyFind(addition) => {
@@ -260,7 +260,7 @@ impl App {
                         }
                     }
                 }
-                self.songs.filtered(self.song_query.as_ref());
+                self.songs.filter_apply(self.song_query.as_ref());
             }
             Message::ClearUpNext => {
                 self.songs.clear_up_next();

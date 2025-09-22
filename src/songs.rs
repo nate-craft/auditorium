@@ -4,18 +4,12 @@ use std::{
     option::Option,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex},
 };
 
 use color_eyre::eyre::Error;
-use crossterm::{
-    cursor::MoveTo,
-    style::Print,
-    terminal::{Clear, ClearType},
-};
 use ffprobe::FfProbeError;
+use id3::{Tag, TagLike, partial_tag_ok};
 use random_number::rand::{self, seq::SliceRandom};
-use ratatui::crossterm::style::Stylize;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -119,7 +113,35 @@ impl SongList {
 }
 
 impl Song {
-    fn new(file_name: &Path) -> Result<Song, FfProbeError> {
+    fn new(file_name: &Path) -> Result<Song, Error> {
+        let path = file_name.to_owned();
+        let tags = Tag::read_from_path(file_name);
+        let Ok(tags) = partial_tag_ok(tags) else {
+            return Self::from_ffprobe(file_name).map_err(|err| Error::new(err));
+        };
+
+        let title = tags.title().unwrap_or("Unknown").to_owned();
+        let genre = tags.genre().unwrap_or("Unknown").to_owned();
+        let artist = tags.artist().unwrap_or("Unknown").to_owned();
+        let album = tags.album().unwrap_or("Single").to_owned();
+        let track = tags
+            .track()
+            .map(|track| track.to_string())
+            .unwrap_or("1".to_owned());
+
+        let song = Ok(Song {
+            title,
+            genre,
+            artist,
+            album,
+            track,
+            path,
+        });
+
+        return song;
+    }
+
+    fn from_ffprobe(file_name: &Path) -> Result<Song, FfProbeError> {
         let probe = ffprobe::ffprobe(&file_name)?;
         let mut title: String = "Unknown".to_owned();
         let mut genre: String = "Unknown".to_owned();
@@ -256,115 +278,53 @@ impl Songs {
             active: ActiveSong::new(),
         };
 
-        if songs.songs_data_library.is_empty() {
-            if let Some(errors) = songs.load_songs(config, true) {
-                return Err(Error::msg(
-                    errors
-                        .iter()
-                        .map(|e| e.to_string())
-                        .reduce(|acc, e| format!("{}\n{}", acc, e))
-                        .unwrap_or("Music FFProbe error".to_owned()),
-                ));
-            }
-
-            if !config.is_manual_dir() {
-                if let Ok(json) = serde_json::to_string(&songs.songs_data_library) {
-                    if let Ok(mut cache_file) = File::create(cache_path) {
-                        cache_file.write_all(json.as_bytes()).unwrap();
-                    }
-                }
-            }
+        if !songs.songs_data_library.is_empty() {
+            return Ok(songs);
         }
 
-        songs.songs_data_library.sort_by(|first, second| {
-            first
-                .artist
-                .cmp(&second.artist)
-                .then(first.album.cmp(&second.album))
-                .then(first.track.cmp(&second.track))
-                .then(first.title.cmp(&second.title))
-        });
+        match songs.load_songs(config) {
+            Err(errors) => Err(errors),
+            Ok(loaded) => {
+                songs.songs_data_library = loaded;
+                Self::sort(&mut songs.songs_data_library);
 
-        Ok(songs)
+                if !config.is_manual_dir() {
+                    if let Ok(json) = serde_json::to_string(&songs.songs_data_library) {
+                        if let Ok(mut cache_file) = File::create(cache_path) {
+                            cache_file.write_all(json.as_bytes()).unwrap();
+                        }
+                    }
+                }
+
+                Ok(songs)
+            }
+        }
     }
 
-    pub fn load_songs(&mut self, config: &Config, first_load: bool) -> Option<Vec<FfProbeError>> {
+    pub fn load_songs(&mut self, config: &Config) -> Result<Vec<Song>, Error> {
         let mut song_paths = Vec::new();
         Self::load_dir(&config.music_directory(), &mut song_paths);
 
         rlimit::increase_nofile_limit(u64::MAX).unwrap();
-        let tagged = Arc::new(Mutex::new(0));
 
-        let results: Vec<Result<Song, FfProbeError>> = song_paths
-            .par_iter()
-            .map(|path| {
-                let song = Song::new(path);
+        let results: Vec<Result<Song, Error>> =
+            song_paths.par_iter().map(|path| Song::new(path)).collect();
 
-                if !first_load {
-                    return song;
-                }
-
-                let mut tagged = tagged.lock().unwrap();
-                *tagged += 1;
-                let completed = format!("{}/{} Songs", *tagged, song_paths.len());
-                crossterm::execute!(io::stdout(), Clear(ClearType::All)).unwrap();
-                crossterm::execute!(io::stdout(), MoveTo(0, 0)).unwrap();
-                crossterm::execute!(
-                    io::stdout(),
-                    Print(format!(
-                        "{}\n",
-                        "Caching metadata for your library. This is only required once..."
-                            .stylize()
-                            .with(config.color_border.into())
-                    ))
-                )
-                .unwrap();
-                crossterm::execute!(
-                    io::stdout(),
-                    Print(format!(
-                        "{}: {}\n",
-                        "Tagged".stylize().with(config.color_border.into()),
-                        completed.stylize().with(config.color_border.into())
-                    ))
-                )
-                .unwrap();
-                song
-            })
-            .collect();
-
-        let length_results = results.len();
         let valid: Vec<&Song> = results
             .iter()
             .filter_map(|song| song.as_ref().ok())
             .collect();
 
-        if valid.len() == length_results {
-            self.songs_data_library = results.into_iter().filter_map(|song| song.ok()).collect();
-            return None;
-        }
-
-        return Some(
-            results
-                .into_iter()
-                .filter_map(|result| result.err())
-                .collect(),
-        );
-    }
-
-    fn load_dir(dir: &Path, song_paths: &mut Vec<PathBuf>) {
-        if let Ok(child) = dir.read_dir() {
-            child.for_each(|child_result| {
-                let Ok(child) = child_result else {
-                    return;
-                };
-
-                let child_path = child.path();
-                if child_path.is_dir() {
-                    Self::load_dir(&child_path, song_paths);
-                } else {
-                    song_paths.push(child_path);
-                }
-            });
+        if valid.len() == results.len() {
+            Ok(results.into_iter().filter_map(|song| song.ok()).collect())
+        } else {
+            Err(Error::msg(
+                results
+                    .into_iter()
+                    .filter_map(|result| result.err().map(|err| err.to_string()))
+                    .reduce(|acc, e| format!("{}\n{}", acc, e))
+                    .unwrap_or("Music Error".to_owned()),
+            ))
         }
     }
 
@@ -507,35 +467,26 @@ impl Songs {
         self.songs_next.clear();
         self.kill_current();
 
-        if let Some(errors) = self.load_songs(config, false) {
-            Err(Error::msg(
-                errors
-                    .iter()
-                    .map(|e| e.to_string())
-                    .reduce(|acc, e| format!("{}\n{}", acc, e))
-                    .unwrap_or("Music FFProbe error".to_owned()),
-            ))
-        } else {
-            self.songs_data_library.sort_by(|first, second| {
-                first
-                    .artist
-                    .cmp(&second.artist)
-                    .then(first.title.cmp(&second.title))
-            });
+        match self.load_songs(config) {
+            Ok(loaded) => {
+                self.songs_data_library = loaded;
+                Self::sort(&mut self.songs_data_library);
 
-            if !config.is_manual_dir() {
-                if let Ok(json) = serde_json::to_string(&self.songs_data_library) {
-                    if let Ok(mut cache_file) = File::create(files::cache_path()?) {
-                        cache_file.write_all(json.as_bytes()).unwrap();
+                if !config.is_manual_dir() {
+                    if let Ok(json) = serde_json::to_string(&self.songs_data_library) {
+                        if let Ok(mut cache_file) = File::create(files::cache_path()?) {
+                            cache_file.write_all(json.as_bytes()).unwrap();
+                        }
                     }
                 }
-            }
 
-            Ok(())
+                Ok(())
+            }
+            Err(errors) => Err(errors),
         }
     }
 
-    pub fn filtered(&mut self, query: Option<&String>) {
+    pub fn filter_apply(&mut self, query: Option<&String>) {
         let query = query.map(|query| query.to_lowercase());
 
         let filtered: Vec<usize> = if query
@@ -563,7 +514,35 @@ impl Songs {
         self.showing_songs_library = SongList::Filtered(filtered)
     }
 
-    pub fn unfiltered(&mut self) {
+    pub fn unfiltered_apply(&mut self) {
         self.showing_songs_library = SongList::All;
+    }
+
+    fn load_dir(dir: &Path, song_paths: &mut Vec<PathBuf>) {
+        if let Ok(child) = dir.read_dir() {
+            child.for_each(|child_result| {
+                let Ok(child) = child_result else {
+                    return;
+                };
+
+                let child_path = child.path();
+                if child_path.is_dir() {
+                    Self::load_dir(&child_path, song_paths);
+                } else {
+                    song_paths.push(child_path);
+                }
+            });
+        }
+    }
+
+    fn sort(songs: &mut Vec<Song>) {
+        songs.sort_by(|first, second| {
+            first
+                .artist
+                .cmp(&second.artist)
+                .then(first.album.cmp(&second.album))
+                .then(first.track.cmp(&second.track))
+                .then(first.title.cmp(&second.title))
+        });
     }
 }
