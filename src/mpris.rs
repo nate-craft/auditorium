@@ -38,13 +38,18 @@ pub mod mpris {
 
     fn metadata_current(app: &App) -> Option<Metadata> {
         app.songs.current_song().map(|song| {
-            Metadata::builder()
+            let mut builder = Metadata::builder()
                 .artist(vec![song.artist.clone()])
                 .album(song.album.clone())
-                .genre(vec![song.genre.clone()])
+                .genre(song.genres.clone())
                 .title(song.title.clone())
-                .track_number(song.track.parse().unwrap_or(0))
-                .build()
+                .track_number(song.track.parse().unwrap_or(0));
+
+            if let Some(cover) = &song.cover {
+                builder = builder.art_url(cover);
+            }
+
+            builder.build()
         })
     }
 
@@ -63,7 +68,6 @@ pub mod mpris {
     pub fn thread_mpris(app: Arc<Mutex<App>>) -> JoinHandle<Result<()>> {
         thread::spawn(move || {
             smol::block_on(async {
-                // smol::task::block_on(async {
                 let app_ref = app.clone();
                 let server = Server::new("auditorium", AuditoriumPlayer::from(app_ref)).await?;
 

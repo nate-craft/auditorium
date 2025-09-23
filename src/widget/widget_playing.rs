@@ -24,7 +24,15 @@ pub fn build<'a>(app: &mut App) -> Paragraph<'a> {
                 ]),
                 Line::from(vec![
                     Span::styled("Genre: ", Style::default().fg(app.config.color_headers)),
-                    Span::raw(playing.genre.to_owned()),
+                    Span::raw(
+                        playing
+                            .genres
+                            .clone()
+                            .into_iter()
+                            .take(4)
+                            .collect::<Vec<String>>()
+                            .join(", "),
+                    ),
                 ]),
             ])
         } else {

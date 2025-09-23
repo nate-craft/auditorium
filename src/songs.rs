@@ -18,12 +18,14 @@ use crate::{app::SongLoadingState, files::Config};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Song {
+    pub id: u64,
     pub title: String,
-    pub genre: String,
+    pub genres: Vec<String>,
     pub artist: String,
     pub album: String,
     pub track: String,
     pub path: PathBuf,
+    pub cover: Option<String>,
 }
 
 pub struct ActiveSong {
@@ -121,21 +123,44 @@ impl Song {
         };
 
         let title = tags.title().unwrap_or("Unknown").to_owned();
-        let genre = tags.genre().unwrap_or("Unknown").to_owned();
+        let genres = tags
+            .genres()
+            .map(|vec| {
+                if vec.first().map(|first| first.is_empty()).unwrap_or(true) {
+                    vec!["Unknown".to_owned()]
+                } else {
+                    vec.into_iter().map(|str| str.to_owned()).collect()
+                }
+            })
+            .unwrap_or(vec!["Unknown".to_owned()]);
         let artist = tags.artist().unwrap_or("Unknown").to_owned();
         let album = tags.album().unwrap_or("Single").to_owned();
         let track = tags
             .track()
             .map(|track| track.to_string())
             .unwrap_or("1".to_owned());
+        let id = rand::random::<u64>();
+
+        let cover =
+            if let Some(picture) = tags.pictures().next().map(|picture| picture.data.clone()) {
+                let mut cover_path = files::art_path()?;
+                cover_path.push(format!("{}.jpg", &id));
+                let mut file = File::create(&cover_path)?;
+                file.write_all(&picture)?;
+                Some(cover_path.to_string_lossy().to_string())
+            } else {
+                None
+            };
 
         let song = Ok(Song {
+            id,
             title,
-            genre,
+            genres,
             artist,
             album,
             track,
             path,
+            cover,
         });
 
         return song;
@@ -144,7 +169,7 @@ impl Song {
     fn from_ffprobe(file_name: &Path) -> Result<Song, FfProbeError> {
         let probe = ffprobe::ffprobe(&file_name)?;
         let mut title: String = "Unknown".to_owned();
-        let mut genre: String = "Unknown".to_owned();
+        let mut genres: Vec<String> = vec!["Unknown".to_owned()];
         let mut artist: String = "Unknown".to_owned();
         let mut album: String = "Single".to_owned();
         let mut track: String = "1".to_owned();
@@ -158,7 +183,7 @@ impl Song {
             });
             tags.extra.get("genre").map(|genre_inner| {
                 genre_inner.as_str().map(|genre_inner| {
-                    genre = genre_inner.to_owned();
+                    genres = vec![genre_inner.to_owned()];
                 });
             });
             tags.extra.get("artist").map(|artist_inner| {
@@ -197,12 +222,14 @@ impl Song {
         });
 
         return Ok(Song {
+            id: rand::random::<u64>(),
             title,
-            genre,
+            genres,
             artist,
             album,
             track,
             path,
+            cover: None,
         });
     }
 
@@ -224,13 +251,18 @@ impl Song {
         for query in query.split(",") {
             if query.starts_with("genre(") && query.ends_with(")") && query.len() > 8 {
                 let sub_query = query[6..query.len() - 1].to_owned();
-                if !self.genre.to_lowercase().contains(&sub_query) {
-                    return false;
+                for genre in &self.genres {
+                    if !genre.to_lowercase().contains(&sub_query) {
+                        return false;
+                    }
                 }
             } else if query.starts_with("!genre(") && query.ends_with(")") && query.len() > 9 {
                 let sub_query = query[7..query.len() - 1].to_owned();
-                if self.genre.to_lowercase().contains(&sub_query) {
-                    return false;
+
+                for genre in &self.genres {
+                    if genre.to_lowercase().contains(&sub_query) {
+                        return false;
+                    }
                 }
             } else if query.starts_with("album(") && query.ends_with(")") && query.len() > 8 {
                 let sub_query = query[6..query.len() - 1].to_owned();
@@ -303,6 +335,7 @@ impl Songs {
 
     pub fn load_songs(&mut self, config: &Config) -> Result<Vec<Song>, Error> {
         let mut song_paths = Vec::new();
+        files::art_path_delete()?;
         Self::load_dir(&config.music_directory(), &mut song_paths);
 
         rlimit::increase_nofile_limit(u64::MAX).unwrap();

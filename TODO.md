@@ -22,9 +22,9 @@
 - [x] Only allow audio file types when scanning music directory (not necessary)
 - [x] Add album metadata and sorting
 - [x] Add MPRIS functionality
+- [x] Refactor main error handling loop to accumulate errors 
 - [ ] Add album view with hot key for pane switching with library
 - [ ] Add in playlist support for `-p|--playlist`
 - [ ] Clean up filtering/music data distinction on Songs access
 - [ ] Refactor widgets to handle constraints in their build function
-- [ ] Refactor main error handling loop to accumulate errors 
 - [ ] Arch PKGBUILD automation

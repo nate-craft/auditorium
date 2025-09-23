@@ -305,6 +305,11 @@ impl App {
         let running = self.songs.song_is_running();
         let active = self.songs.active_command_mut();
 
+        if self.nav_state == NavState::Exit {
+            self.songs.kill_current();
+            return Ok(());
+        }
+
         if active.marked_dead || (exists && !running) {
             // Manually killed
             self.songs.next(&self.song_state);

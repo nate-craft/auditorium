@@ -81,10 +81,26 @@ impl Config {
 pub fn cache_path() -> Result<PathBuf, Error> {
     let root_dir = dirs::cache_dir().ok_or(Error::msg("Could not load cache directory!"))?;
     let cache_dir = root_dir.join("auditorium");
-    if !cache_dir.exists() {
-        fs::create_dir(&cache_dir).map_err(|err| Error::new(err))?;
-    }
+    fs::create_dir_all(&cache_dir).map_err(|err| Error::new(err))?;
     Ok(cache_dir.join("cache.json"))
+}
+
+pub fn art_path() -> Result<PathBuf, Error> {
+    let root_dir = dirs::cache_dir().ok_or(Error::msg("Could not load cache directory!"))?;
+    let cache_dir = root_dir.join("auditorium");
+    let picture_dir = cache_dir.join("pictures");
+    fs::create_dir_all(&picture_dir).map_err(|err| Error::new(err))?;
+    Ok(picture_dir)
+}
+
+pub fn art_path_delete() -> Result<(), Error> {
+    let root_dir = dirs::cache_dir().ok_or(Error::msg("Could not load cache directory!"))?;
+    let cache_dir = root_dir.join("auditorium");
+    let picture_dir = cache_dir.join("pictures");
+    if fs::exists(&picture_dir).is_ok() {
+        let _ = fs::remove_dir_all(picture_dir);
+    }
+    Ok(())
 }
 
 fn music_path() -> Result<PathBuf, Error> {
