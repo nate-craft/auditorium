@@ -30,6 +30,10 @@ pub struct Song {
 
 pub struct ActiveSong {
     pub child: Option<Child>,
+    #[cfg(feature = "image")]
+    pub cover: Option<ratatui_image::protocol::StatefulProtocol>,
+    #[cfg(not(feature = "image"))]
+    pub cover: Option<()>,
     pub marked_dead: bool,
 }
 
@@ -51,6 +55,7 @@ impl ActiveSong {
         ActiveSong {
             child: None,
             marked_dead: false,
+            cover: None,
         }
     }
 
@@ -60,10 +65,41 @@ impl ActiveSong {
             None => None,
         };
 
-        Ok(ActiveSong {
+        #[cfg(feature = "image")]
+        return Ok(ActiveSong {
             child,
             marked_dead: false,
-        })
+            cover: song
+                .map(|song| {
+                    use image::ImageReader;
+                    use ratatui_image::picker::Picker;
+
+                    let Some(cover) = &song.cover else {
+                        return None;
+                    };
+
+                    let Ok(picker) = Picker::from_query_stdio() else {
+                        return None;
+                    };
+
+                    let Ok(Ok(cover)) =
+                        ImageReader::open(PathBuf::from(cover)).map(|image| image.decode())
+                    else {
+                        return None;
+                    };
+
+                    let dim = cover.height().min(cover.width());
+                    Some(picker.new_resize_protocol(cover.crop_imm(0, 0, dim, dim)))
+                })
+                .flatten(),
+        });
+
+        #[cfg(not(feature = "image"))]
+        return Ok(ActiveSong {
+            child,
+            cover: None,
+            marked_dead: false,
+        });
     }
 
     fn try_kill(&mut self) -> Result<(), io::Error> {

@@ -365,7 +365,7 @@ impl App {
             }
         }
 
-        let widget_playing = widget_playing::build(self);
+        let (widget_playing, border_player) = widget_playing::build(self);
         let widget_history = widget_history::build(self);
         let mut widget_search = widget_search::build(self);
         let mut widget_next = widget_up_next::build(self, left_middle);
@@ -425,6 +425,35 @@ impl App {
             frame.render_widget(widget_library, right_bottom);
         }
 
+        frame.render_widget(&border_player, left_top);
+
+        #[cfg(feature = "image")]
+        if let Some(cover) = &mut self.songs.active_command_mut().cover {
+            use ratatui::layout::Direction;
+
+            let left_top_area = border_player.inner(left_top);
+            let [player_left, player_right] = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Length(left_top_area.width - (left_top_area.height * 2)),
+                    Constraint::Length(7),
+                ])
+                .areas(left_top_area);
+
+            frame.render_widget(&widget_playing, player_left);
+
+            frame.render_stateful_widget(
+                ratatui_image::StatefulImage::default(),
+                player_right,
+                cover,
+            );
+        } else {
+            frame.render_widget(&widget_playing, border_player.inner(left_top));
+        }
+
+        #[cfg(not(feature = "image"))]
+        frame.render_widget(&widget_playing, border_player.inner(left_top));
+
         if let Some(alert) = &self.alert {
             let vertical = Layout::vertical([Constraint::Length(3)]).flex(Flex::Center);
             let horizontal =
@@ -438,7 +467,6 @@ impl App {
 
         frame.render_widget(outer_border, frame.area());
         frame.render_widget(widget_history, left_bottom);
-        frame.render_widget(widget_playing, left_top);
         frame.render_widget(widget_search, right_top);
     }
 

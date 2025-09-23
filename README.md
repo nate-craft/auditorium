@@ -30,6 +30,8 @@ Auditorium is a cross-platform, local, simple, fast, and distraction free CLI ap
 
 - Optional [MPRIS](https://wiki.archlinux.org/title/MPRIS) support for system-wide control
 
+- Optional cover art support with any terminal-image viewer
+
 - Extremely light memory usage
 
 ___
@@ -43,6 +45,12 @@ cargo install --git https://github.com/nate-craft/auditorium
 
 # Including optional globally-controlled mpris support
 cargo install --git https://github.com/nate-craft/auditorium --features mpris
+
+# Including optional covert art support
+cargo install --git https://github.com/nate-craft/auditorium --features art
+
+# Including optional globally-controlled mpris support AND cover art
+cargo install --git https://github.com/nate-craft/auditorium --features "mpris, art"
 ```
 
 Auditorium requires [mpv](https://mpv.io/) and [ffmpeg](https://ffmpeg.org/index.html?) to be installed.

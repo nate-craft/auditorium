@@ -2,16 +2,15 @@ use ratatui::{
     layout::Alignment,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Paragraph},
+    widgets::{Block, BorderType, Padding, Paragraph},
 };
 
-use crate::App;
-use crate::NavState;
 use crate::mpv::MpvCommand;
 use crate::mpv::MpvCommandFeedback;
+use crate::{App, app::NavState};
 
-pub fn build<'a>(app: &mut App) -> Paragraph<'a> {
-    let mut widget_playing = {
+pub fn build<'a>(app: &mut App) -> (Paragraph<'a>, Block<'a>) {
+    let widget_playing = {
         if let Some(playing) = app.songs.current_song() {
             Paragraph::new(vec![
                 Line::from(vec![
@@ -40,7 +39,7 @@ pub fn build<'a>(app: &mut App) -> Paragraph<'a> {
         }
     };
 
-    let player_title = {
+    let title_player = {
         let prefix = if app.paused { " Paused " } else { " Playing " };
         if app.songs.song_is_running() {
             if let Ok(feedback) = MpvCommand::GetProgress.run() {
@@ -57,28 +56,27 @@ pub fn build<'a>(app: &mut App) -> Paragraph<'a> {
         }
     };
 
-    let title_player = if app.paused {
+    let title_nav = if app.paused {
         " | [Space] Play | [</>] Prev/Next | [Left/Right] Seek | "
     } else {
         " | [Space] Pause | [</>] Prev/Next | [Left/Right] Seek | "
+    }
+    .to_owned();
+
+    let border_player = if app.nav_state == NavState::Player {
+        Block::bordered()
+            .border_style(Style::new().fg(app.config.color_border))
+            .border_type(BorderType::Thick)
+            .title(title_player)
+            .title_bottom(title_nav)
+            .padding(Padding::uniform(0))
+            .title_alignment(Alignment::Center)
+    } else {
+        Block::bordered()
+            .title(title_player)
+            .padding(Padding::uniform(0))
+            .title_alignment(Alignment::Center)
     };
 
-    if app.nav_state == NavState::Player {
-        widget_playing = widget_playing.block(
-            Block::bordered()
-                .border_style(Style::new().fg(app.config.color_border))
-                .border_type(BorderType::Thick)
-                .title(player_title)
-                .title_bottom(title_player)
-                .title_alignment(Alignment::Center),
-        );
-    } else {
-        widget_playing = widget_playing.block(
-            Block::bordered()
-                .title(player_title)
-                .title_alignment(Alignment::Center),
-        );
-    }
-
-    widget_playing
+    (widget_playing, border_player)
 }
