@@ -7,7 +7,12 @@ use ratatui::{
 };
 use std::{
     cmp::{max, min},
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        Arc, Mutex,
+        mpsc::{self, Receiver, Sender},
+    },
+    thread,
+    time::Duration,
 };
 
 use crate::{
@@ -136,6 +141,20 @@ impl App {
             alert: None,
             song_query: None,
             mpris_message_out: mpsc::channel(),
+        }
+    }
+
+    pub fn do_once<F, R>(app: Arc<Mutex<App>>, work: F) -> R
+    where
+        F: FnOnce(&mut App) -> R,
+    {
+        loop {
+            let Ok(mut app) = app.try_lock() else {
+                thread::sleep(Duration::from_millis(15));
+                continue;
+            };
+
+            return work(&mut app);
         }
     }
 

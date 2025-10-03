@@ -21,6 +21,8 @@ pub mod mpris {
     use mpris_server::Volume;
     use mpris_server::zbus;
     use mpris_server::zbus::fdo;
+
+    use std::time::Duration;
     use std::{
         sync::{Arc, Mutex},
         thread::{self, JoinHandle},
@@ -54,14 +56,10 @@ pub mod mpris {
     }
 
     fn paused_current(app: &App, paused: bool) -> PlaybackStatus {
-        if app.songs.current_song().is_some() {
-            if paused {
-                PlaybackStatus::Paused
-            } else {
-                PlaybackStatus::Playing
-            }
-        } else {
-            PlaybackStatus::Stopped
+        match (app.songs.current_song().is_some(), paused) {
+            (true, true) => PlaybackStatus::Paused,
+            (true, false) => PlaybackStatus::Playing,
+            (false, _) => PlaybackStatus::Stopped,
         }
     }
 
@@ -126,6 +124,9 @@ pub mod mpris {
                             _ => {}
                         }
                     }
+
+                    drop(app);
+                    thread::sleep(Duration::from_millis(50));
                 }
             })
         })
@@ -133,94 +134,57 @@ pub mod mpris {
 
     impl PlayerInterface for AuditoriumPlayer {
         async fn next(&self) -> fdo::Result<()> {
-            loop {
-                let Ok(mut app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                return app
-                    .handle_message_mpris(Message::SongNext)
-                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
-            }
+            App::do_once(self.app.clone(), |app| {
+                app.handle_message_mpris(Message::SongNext)
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()))
+            })
         }
 
         async fn previous(&self) -> fdo::Result<()> {
-            loop {
-                let Ok(mut app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                return app
-                    .handle_message_mpris(Message::SongPrevious)
-                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
-            }
+            App::do_once(self.app.clone(), |app| {
+                app.handle_message_mpris(Message::SongPrevious)
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()))
+            })
         }
 
         async fn pause(&self) -> fdo::Result<()> {
-            loop {
-                let Ok(mut app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                return app
-                    .handle_message_mpris(Message::PauseToggle(true))
-                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
-            }
+            App::do_once(self.app.clone(), |app| {
+                app.handle_message_mpris(Message::PauseToggle(true))
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()))
+            })
         }
 
         async fn play_pause(&self) -> fdo::Result<()> {
-            loop {
-                let Ok(mut app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                let paused = !app.paused;
-
-                return app
-                    .handle_message_mpris(Message::PauseToggle(paused))
-                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
-            }
+            App::do_once(self.app.clone(), |app| {
+                app.handle_message_mpris(Message::PauseToggle(!app.paused))
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()))
+            })
         }
 
         async fn stop(&self) -> fdo::Result<()> {
-            loop {
-                let Ok(mut app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                return app
-                    .handle_message_mpris(Message::Stop)
-                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
-            }
+            App::do_once(self.app.clone(), |app| {
+                app.handle_message_mpris(Message::Stop)
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()))
+            })
         }
 
         async fn play(&self) -> fdo::Result<()> {
-            loop {
-                let Ok(mut app) = self.app.try_lock() else {
-                    continue;
-                };
-
+            App::do_once(self.app.clone(), |app| {
                 let result = if app.songs.current_song().is_some() {
                     app.handle_message_mpris(Message::PauseToggle(false))
                 } else {
                     app.handle_message_mpris(Message::PlayAll)
                 };
 
-                return result
-                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
-            }
+                result.map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()))
+            })
         }
 
         async fn seek(&self, time: Time) -> fdo::Result<()> {
-            loop {
-                let Ok(mut app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                return app
-                    .handle_message_mpris(Message::SongSeek(time.as_secs() as i32))
-                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
-            }
+            App::do_once(self.app.clone(), |app| {
+                app.handle_message_mpris(Message::SongSeek(time.as_secs() as i32))
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()))
+            })
         }
 
         async fn set_position(&self, _: TrackId, _: Time) -> fdo::Result<()> {
@@ -234,20 +198,13 @@ pub mod mpris {
         }
 
         async fn playback_status(&self) -> fdo::Result<PlaybackStatus> {
-            loop {
-                let Ok(app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                if app.songs.current_song().is_none() {
-                    return Ok(PlaybackStatus::Stopped);
-                }
-
-                match app.paused {
-                    true => return Ok(PlaybackStatus::Paused),
-                    false => return Ok(PlaybackStatus::Playing),
-                }
-            }
+            App::do_once(self.app.clone(), |app| {
+                Ok(match (app.paused, app.songs.current_song().is_none()) {
+                    (true, _) => PlaybackStatus::Stopped,
+                    (_, true) => PlaybackStatus::Paused,
+                    (_, false) => PlaybackStatus::Playing,
+                })
+            })
         }
 
         async fn loop_status(&self) -> fdo::Result<LoopStatus> {
@@ -281,14 +238,9 @@ pub mod mpris {
         }
 
         async fn metadata(&self) -> fdo::Result<Metadata> {
-            loop {
-                let Ok(app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                return metadata_current(&app)
-                    .ok_or(fdo::Error::Failed("No song playing".to_owned()));
-            }
+            App::do_once(self.app.clone(), |app| {
+                metadata_current(&app).ok_or(fdo::Error::Failed("No song playing".to_owned()))
+            })
         }
 
         async fn volume(&self) -> fdo::Result<Volume> {
@@ -303,16 +255,11 @@ pub mod mpris {
 
         async fn position(&self) -> fdo::Result<Time> {
             match MpvCommand::GetPosition.run() {
-                Ok(result) => {
-                    if let MpvCommandFeedback::Int(position) = result {
-                        Ok(Time::from_secs(position as i64))
-                    } else {
-                        Err(fdo::Error::Failed(
-                            "Critial error: MPV get position returning incorrect type".to_owned(),
-                        ))
-                    }
-                }
+                Ok(MpvCommandFeedback::Int(position)) => Ok(Time::from_secs(position as i64)),
                 Err(err) => Err(fdo::Error::Failed(err.to_string())),
+                _ => Err(fdo::Error::Failed(
+                    "Could not send internal message".to_owned(),
+                )),
             }
         }
 
@@ -355,15 +302,10 @@ pub mod mpris {
         }
 
         async fn quit(&self) -> fdo::Result<()> {
-            loop {
-                let Ok(mut app) = self.app.try_lock() else {
-                    continue;
-                };
-
-                return app
-                    .handle_message_mpris(Message::Exit)
-                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()));
-            }
+            App::do_once(self.app.clone(), |app| {
+                app.handle_message_mpris(Message::Exit)
+                    .map_err(|_| fdo::Error::Failed("Could not send internal message".to_owned()))
+            })
         }
 
         async fn can_quit(&self) -> fdo::Result<bool> {

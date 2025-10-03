@@ -1,4 +1,3 @@
-use std::thread;
 use std::time::Duration;
 
 use crossterm::event::{
@@ -13,10 +12,9 @@ use crate::app::NavState;
 
 pub fn handle_input(app: &mut App) -> Message {
     let event;
-    if event::poll(Duration::new(0, 10000)).unwrap() {
+    if event::poll(Duration::new(0, 0)).unwrap() {
         event = event::read().unwrap();
     } else {
-        thread::sleep(Duration::from_millis(10));
         return Message::None;
     }
 

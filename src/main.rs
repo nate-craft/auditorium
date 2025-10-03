@@ -37,13 +37,12 @@ struct Flags {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    let flags = Flags::parse();
 
+    let flags = Flags::parse();
     let config = Config::with_dir(flags.dir)?;
     let cache_path = files::cache_path()?;
     let songs = Songs::new(&config, &cache_path)?;
     let app = Arc::new(Mutex::new(App::new(songs, config)));
-
     let mut handles = threads(app.clone(), ratatui::init());
 
     io::stdout().execute(crossterm::event::EnableMouseCapture)?;
@@ -109,7 +108,8 @@ fn thread_draw(
                 return Err(err);
             }
 
-            thread::sleep(Duration::from_millis(17));
+            drop(app);
+            thread::sleep(Duration::from_millis(75));
         }
     })
 }
@@ -129,6 +129,9 @@ fn thread_events(app: Arc<Mutex<App>>) -> JoinHandle<Result<()>> {
                 app.exit();
                 return Err(err);
             }
+
+            drop(app);
+            thread::sleep(Duration::from_millis(5));
         }
     })
 }
