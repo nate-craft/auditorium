@@ -1,6 +1,7 @@
 use clap::{Parser, arg, command};
 use color_eyre::{Result, eyre::Error};
 use crossterm::ExecutableCommand;
+#[cfg(feature = "mpris")]
 use ratatui::{Terminal, prelude::CrosstermBackend};
 use std::{
     io::{self, Stdout},
@@ -11,7 +12,7 @@ use std::{
 };
 
 use crate::{
-    app::{App, NavState},
+    app::{App, AppLayout, NavState},
     files::Config,
     songs::Songs,
 };
@@ -91,6 +92,9 @@ fn thread_draw(
     mut terminal: Terminal<CrosstermBackend<Stdout>>,
 ) -> JoinHandle<Result<()>> {
     thread::spawn(move || {
+        let mut ms_elapsed: u64 = 0;
+        const DELAY: u64 = 17;
+
         loop {
             let Ok(mut app) = app.try_lock() else {
                 continue;
@@ -100,16 +104,29 @@ fn thread_draw(
                 return Ok(());
             }
 
-            if let Err(err) = terminal
-                .draw(|frame| app.draw(frame))
-                .map_err(|err| Error::new(err))
-            {
-                app.exit();
-                return Err(err);
+            if app.needs_redraw || ms_elapsed % (DELAY * 10) == 0 {
+                let area = terminal.get_frame().area();
+                let layout = AppLayout::new(&area);
+
+                if app.click_position.is_some() {
+                    app.handle_click(&layout);
+                }
+
+                let result = terminal
+                    .draw(|frame| app.draw(frame, layout))
+                    .map_err(|err| Error::new(err));
+
+                if let Err(err) = result {
+                    app.exit();
+                    return Err(err);
+                }
+
+                app.needs_redraw = false;
             }
 
             drop(app);
-            thread::sleep(Duration::from_millis(75));
+            ms_elapsed += DELAY;
+            thread::sleep(Duration::from_millis(DELAY));
         }
     })
 }

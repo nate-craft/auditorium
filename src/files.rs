@@ -13,9 +13,15 @@ pub struct Config {
     pub color_border: Color,
     pub color_headers: Color,
     pub color_row: Color,
+    #[serde(default = "default_opt_cover")]
+    pub show_cover: bool,
     music_directory: PathBuf,
     #[serde(skip)]
     manual_music_directory: Option<PathBuf>,
+}
+
+const fn default_opt_cover() -> bool {
+    cfg!(feature = "art")
 }
 
 impl Default for Config {
@@ -25,6 +31,7 @@ impl Default for Config {
             color_headers: Color::Green,
             color_row: Color::Indexed(246),
             music_directory: music_path().unwrap_or(Path::new("Music").to_path_buf()),
+            show_cover: cfg!(feature = "art"),
             manual_music_directory: None,
         }
     }

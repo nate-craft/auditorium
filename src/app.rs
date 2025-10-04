@@ -49,10 +49,11 @@ pub struct App {
     pub click_position: Option<Position>,
     pub alert: Option<String>,
     pub song_query: Option<String>,
-    pub mpris_message_out: (Sender<Message>, Receiver<Message>),
+    pub mpris_channel: (Sender<Message>, Receiver<Message>),
+    pub needs_redraw: bool,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Message {
     None,
     Exit,
@@ -74,6 +75,22 @@ pub enum Message {
     ModifyFind(Option<char>),
     ClearUpNext,
     SongSeek(i32),
+    Resize,
+}
+
+pub struct AppLayout<'a> {
+    border: Block<'a>,
+    left_top: Rect,
+    left_middle: Rect,
+    left_bottom: Rect,
+    right_top: Rect,
+    right_bottom: Rect,
+}
+
+impl Message {
+    pub fn is_none(&self) -> bool {
+        *self == Self::None
+    }
 }
 
 impl NavState {
@@ -129,6 +146,39 @@ impl NavState {
     }
 }
 
+impl<'a> AppLayout<'a> {
+    pub fn new(frame: &Rect) -> AppLayout<'a> {
+        let border = Block::bordered()
+            .title(" Music ")
+            .title_alignment(Alignment::Center)
+            .title_style(Style::default().bold())
+            .title_bottom("| [Tab] Nav | [j/k] Up/Down |")
+            .borders(Borders::all());
+
+        let [left, right] =
+            Layout::horizontal([Constraint::Fill(1); 2]).areas(border.inner(*frame));
+
+        let [right_top, right_bottom] =
+            Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).areas(right);
+
+        let [left_top, left_middle, left_bottom] = Layout::vertical([
+            Constraint::Length(5),
+            Constraint::Fill(1),
+            Constraint::Length(3),
+        ])
+        .areas(left);
+
+        AppLayout {
+            border,
+            left_top,
+            left_middle,
+            left_bottom,
+            right_top,
+            right_bottom,
+        }
+    }
+}
+
 impl App {
     pub fn new(songs: Songs, config: Config) -> App {
         App {
@@ -140,7 +190,8 @@ impl App {
             click_position: None,
             alert: None,
             song_query: None,
-            mpris_message_out: mpsc::channel(),
+            mpris_channel: mpsc::channel(),
+            needs_redraw: true,
         }
     }
 
@@ -160,7 +211,6 @@ impl App {
 
     pub fn handle_events(&mut self) -> Result<()> {
         let message = input::handle_input(self);
-
         let result_handle = self
             .handle_message(message)
             .map_err(|err| Error::msg(err.to_string()));
@@ -170,7 +220,7 @@ impl App {
         match message {
             Message::None | Message::Escape => {}
             _ => {
-                self.mpris_message_out.0.send(message)?;
+                self.mpris_channel.0.send(message)?;
             }
         }
 
@@ -179,7 +229,7 @@ impl App {
 
     pub fn handle_message_mpris(&mut self, message: Message) -> Result<()> {
         let result_mpris = self
-            .mpris_message_out
+            .mpris_channel
             .0
             .send(message)
             .map_err(|err| Error::new(err));
@@ -202,8 +252,12 @@ impl App {
     }
 
     fn handle_message(&mut self, message: Message) -> Result<()> {
+        if !message.is_none() {
+            self.needs_redraw = true;
+        }
+
         match message {
-            Message::None => {}
+            Message::None | Message::Resize => {}
             Message::Exit => {
                 self.exit();
                 return Ok(());
@@ -334,7 +388,7 @@ impl App {
             self.songs.next(&self.song_state);
             self.song_state = SongLoadingState::Forward;
             self.paused = false;
-            self.songs.try_play_current_song()?;
+            self.songs.try_play_current_song(self.config.show_cover)?;
         } else if !running {
             // Nothing playing yet
             match self.song_state {
@@ -342,7 +396,7 @@ impl App {
                     self.songs.previous();
                 }
                 SongLoadingState::Forward => {
-                    self.songs.try_play_current_song()?;
+                    self.songs.try_play_current_song(self.config.show_cover)?;
                 }
             }
 
@@ -352,43 +406,27 @@ impl App {
         return Ok(());
     }
 
-    pub fn draw(&mut self, frame: &mut Frame) {
-        let outer_border = Block::bordered()
-            .title(" Music ")
-            .title_alignment(Alignment::Center)
-            .title_style(Style::default().bold())
-            .title_bottom("| [Tab] Nav | [j/k] Up/Down |")
-            .borders(Borders::all());
-        let outer_area = outer_border.inner(frame.area());
-
-        let [left, right] = Layout::horizontal([Constraint::Fill(1); 2]).areas(outer_area);
-        let [right_top, right_bottom] =
-            Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).areas(right);
-        let [left_top, left_middle, left_bottom] = Layout::vertical([
-            Constraint::Length(5),
-            Constraint::Fill(1),
-            Constraint::Length(3),
-        ])
-        .areas(left);
-
-        if self.click_position_matches_rect(left_top) {
+    pub fn handle_click(&mut self, layout: &AppLayout) {
+        if self.click_position_matches_rect(layout.left_top) {
             self.set_nav_state(NavState::Player);
-        } else if self.click_position_matches_rect(left_middle) {
+        } else if self.click_position_matches_rect(layout.left_middle) {
             self.set_nav_state(NavState::UpNext(TableState::default()).as_stateful_default(&self));
-        } else if self.click_position_matches_rect(right_bottom) {
+        } else if self.click_position_matches_rect(layout.right_bottom) {
             self.set_nav_state(NavState::Library(TableState::default()).as_stateful_default(&self));
-        } else if self.click_position_matches_rect(right_top) {
+        } else if self.click_position_matches_rect(layout.right_top) {
             self.set_nav_state(NavState::Search);
             if self.song_query.is_none() {
                 self.song_query = Some("".to_string());
             }
         }
+    }
 
+    pub fn draw(&mut self, frame: &mut Frame, layout: AppLayout) {
         let (widget_playing, border_player) = widget_playing::build(self);
         let widget_history = widget_history::build(self);
         let mut widget_search = widget_search::build(self);
-        let mut widget_next = widget_up_next::build(self, left_middle);
-        let mut widget_library = widget_library::build(self, right_bottom);
+        let mut widget_next = widget_up_next::build(self, layout.left_middle);
+        let mut widget_library = widget_library::build(self, layout.right_bottom);
 
         if let NavState::Search = self.nav_state {
             let mut border = Block::bordered()
@@ -415,14 +453,14 @@ impl App {
                     .title_bottom(" | [Enter] Play Now | [Backspace] Remove | [c] Clear | ")
                     .title_alignment(Alignment::Center),
             );
-            frame.render_stateful_widget(widget_next, left_middle, state);
+            frame.render_stateful_widget(widget_next, layout.left_middle, state);
         } else {
             widget_next = widget_next.block(
                 Block::bordered()
                     .title_top(" Up Next ")
                     .title_alignment(Alignment::Center),
             );
-            frame.render_widget(widget_next, left_middle);
+            frame.render_widget(widget_next, layout.left_middle);
         }
 
         if let NavState::Library(state) = &mut self.nav_state {
@@ -434,23 +472,23 @@ impl App {
                     .title_bottom(" | [/] Search | [Enter] Play Later | [a] Play All | ")
                     .title_alignment(Alignment::Center),
             );
-            frame.render_stateful_widget(widget_library, right_bottom, state);
+            frame.render_stateful_widget(widget_library, layout.right_bottom, state);
         } else {
             widget_library = widget_library.block(
                 Block::bordered()
                     .title(" Library ")
                     .title_alignment(Alignment::Center),
             );
-            frame.render_widget(widget_library, right_bottom);
+            frame.render_widget(widget_library, layout.right_bottom);
         }
 
-        frame.render_widget(&border_player, left_top);
+        frame.render_widget(&border_player, layout.left_top);
 
         #[cfg(feature = "image")]
         if let Some(cover) = &mut self.songs.active_command_mut().cover {
             use ratatui::layout::Direction;
 
-            let left_top_area = border_player.inner(left_top);
+            let left_top_area = border_player.inner(layout.left_top);
             let [player_left, player_right] = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([
@@ -467,7 +505,7 @@ impl App {
                 cover,
             );
         } else {
-            frame.render_widget(&widget_playing, border_player.inner(left_top));
+            frame.render_widget(&widget_playing, border_player.inner(layout.left_top));
         }
 
         #[cfg(not(feature = "image"))]
@@ -484,9 +522,9 @@ impl App {
             frame.render_widget(widget_popup::build(self, &alert), area);
         }
 
-        frame.render_widget(outer_border, frame.area());
-        frame.render_widget(widget_history, left_bottom);
-        frame.render_widget(widget_search, right_top);
+        frame.render_widget(layout.border.clone(), frame.area());
+        frame.render_widget(widget_history, layout.left_bottom);
+        frame.render_widget(widget_search, layout.right_top);
     }
 
     pub fn exit(&mut self) {

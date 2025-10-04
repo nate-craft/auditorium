@@ -9,7 +9,7 @@ use crate::mpv::MpvCommand;
 use crate::mpv::MpvCommandFeedback;
 use crate::{App, app::NavState};
 
-pub fn build<'a>(app: &mut App) -> (Paragraph<'a>, Block<'a>) {
+pub fn build<'a>(app: &App) -> (Paragraph<'a>, Block<'a>) {
     let widget_playing = {
         if let Some(playing) = app.songs.current_song() {
             Paragraph::new(vec![
@@ -41,13 +41,9 @@ pub fn build<'a>(app: &mut App) -> (Paragraph<'a>, Block<'a>) {
 
     let title_player = {
         let prefix = if app.paused { " Paused " } else { " Playing " };
-        if app.songs.song_is_running() {
-            if let Ok(feedback) = MpvCommand::GetProgress.run() {
-                if let MpvCommandFeedback::String(progress) = feedback {
-                    format!("{}{} ", prefix, progress)
-                } else {
-                    prefix.to_string()
-                }
+        if app.songs.active_exists() {
+            if let Ok(MpvCommandFeedback::String(progress)) = MpvCommand::GetProgress.run() {
+                format!("{}{} ", prefix, progress)
             } else {
                 prefix.to_string()
             }

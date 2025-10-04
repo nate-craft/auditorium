@@ -59,7 +59,7 @@ impl ActiveSong {
         }
     }
 
-    fn with_song(song: Option<&Song>) -> Result<ActiveSong, io::Error> {
+    fn with_song(song: Option<&Song>, load_cover: bool) -> Result<ActiveSong, io::Error> {
         let child = match song {
             Some(song) => Some(song.play_single()?),
             None => None,
@@ -73,6 +73,10 @@ impl ActiveSong {
                 .map(|song| {
                     use image::ImageReader;
                     use ratatui_image::picker::Picker;
+
+                    if !load_cover {
+                        return None;
+                    }
 
                     let Some(cover) = &song.cover else {
                         return None;
@@ -478,8 +482,8 @@ impl Songs {
         self.songs_next.insert(1, selected);
     }
 
-    pub fn try_play_current_song(&mut self) -> Result<(), io::Error> {
-        self.active = ActiveSong::with_song(self.current_song())?;
+    pub fn try_play_current_song(&mut self, load_cover: bool) -> Result<(), io::Error> {
+        self.active = ActiveSong::with_song(self.current_song(), load_cover)?;
         Ok(())
     }
 

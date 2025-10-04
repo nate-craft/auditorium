@@ -79,7 +79,7 @@ pub mod mpris {
                     }
 
                     let mut messages = Vec::new();
-                    while let Ok(msg) = app.mpris_message_out.1.try_recv() {
+                    while let Ok(msg) = app.mpris_channel.1.try_recv() {
                         messages.push(msg);
                     }
 

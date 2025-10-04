@@ -20,7 +20,9 @@ pub fn handle_input(app: &mut App) -> Message {
 
     app.reset_click_position();
 
-    if let Event::Mouse(MouseEvent {
+    if let Event::Resize(_, _) = event {
+        return Message::Resize;
+    } else if let Event::Mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column,
         row,
