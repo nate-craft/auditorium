@@ -509,7 +509,7 @@ impl App {
         }
 
         #[cfg(not(feature = "image"))]
-        frame.render_widget(&widget_playing, border_player.inner(left_top));
+        frame.render_widget(&widget_playing, border_player.inner(layout.left_top));
 
         if let Some(alert) = &self.alert {
             let vertical = Layout::vertical([Constraint::Length(3)]).flex(Flex::Center);

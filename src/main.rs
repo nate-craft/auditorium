@@ -1,7 +1,6 @@
 use clap::{Parser, arg, command};
 use color_eyre::{Result, eyre::Error};
 use crossterm::ExecutableCommand;
-#[cfg(feature = "mpris")]
 use ratatui::{Terminal, prelude::CrosstermBackend};
 use std::{
     io::{self, Stdout},
