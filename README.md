@@ -8,17 +8,15 @@ Auditorium is a cross-platform, local, simple, fast, and distraction free CLI ap
 
 ## Features
 
-- Fetches song metadata for all tracks such as genre(s), artist(s), album(s), and title via ffprobe locally
+- Locally fetches song metadata such as genre(s), artist(s), album(s), track number, and title
 
 - Plays tracks with the lightweight MPV background audio player
 
 - Quick navigation with vim-style keybinds
 
-- Easily adds tracks to "Play Later" to enable auto play
+- "Play Later" feature for auto play and "Play All" to play shuffled playlists
 
 - Automatically saves song history to allow song repetition
-
-- Simple "Play All" key to shuffle all local music
 
 - Built-in fuzzy finder with category-specific searching 
 
@@ -32,7 +30,7 @@ Auditorium is a cross-platform, local, simple, fast, and distraction free CLI ap
 
 - Optional cover art support with any terminal-image viewer
 
-- Extremely light memory usage
+- Extremely light memory and CPU usage
 
 ___
 
@@ -112,7 +110,7 @@ ___
 
 ## Configuration
 
-Auditorium's configuration can be found at `$XDG_CONFIG_HOME/auditorium/config.toml`.  
+Auditorium's configuration can be found at `$XDG_CONFIG_HOME/auditorium/config.json`.  
 It can be reloaded at any time with `Shift+R`  
 
 ### Color Formatting
