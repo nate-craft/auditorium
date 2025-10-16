@@ -2,6 +2,14 @@
 name = "auditorium"
 version = "1.2.3"
 edition = "2024"
+authors = ["Nate Craft"]
+keywords = ["music", "CLI", "TUI", "cross-platform", "player"]
+license = "MIT"
+description = "Auditorium is a cross-platform, local, simple, fast, and distraction free CLI application to listen to your music library"
+readme = "README.md"
+homepage = "https://github.com/nate-craft/auditorium"
+repository = "https://github.com/nate-craft/auditorium"
+license-file = "LICENSE.txt"
 
 [dependencies]
 mpris-server = { version = "0.9.0", optional = true }
