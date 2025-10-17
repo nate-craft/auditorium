@@ -36,7 +36,7 @@ ___
 
 ## Installation
 
-Auditorium can be installed via [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
+Auditorium can be installed from source via [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html):
 ```bash
 # Lighter terminal-only controlled system
 cargo install --git https://github.com/nate-craft/auditorium
@@ -49,6 +49,15 @@ cargo install --git https://github.com/nate-craft/auditorium --features art
 
 # Including optional globally-controlled mpris support AND cover art
 cargo install --git https://github.com/nate-craft/auditorium --features "mpris, art"
+```
+
+Alternatively, precompiled binaries can be found on the [AUR](https://aur.archlinux.org)
+```bash
+# Including optional globally-controlled mpris support AND cover art
+paru -Syu auditorium
+
+# Lighter terminal-only controlled system
+paru -Syu auditorium-minimal
 ```
 
 Auditorium requires [mpv](https://mpv.io/) and [ffmpeg](https://ffmpeg.org/index.html?) to be installed.
