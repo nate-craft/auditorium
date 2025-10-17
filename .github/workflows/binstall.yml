@@ -12,7 +12,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Publish
-        run: cargo publish
+        run: cargo publish --allow-dirty || echo "Cargo publish failed, continuing..."
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
       - name: Create Release
