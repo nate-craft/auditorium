@@ -1,0 +1,67 @@
+name: Publish
+on:
+  push:
+    branches:
+      - main
+jobs:
+  Publish:
+    runs-on: ubuntu-latest
+    container:
+      image: rust:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Publish
+        run: cargo publish --allow-dirty || echo "Cargo publish failed, continuing..."
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
+
+      - name: Get Version
+        id: get_version
+        run: echo "VERSION=$(grep '^version =' Cargo.toml | cut -d' ' -f3 | tr -d '\"')" >> $GITHUB_ENV
+
+      - name: Define Binary Name
+        id: define_binary
+        run: |
+          echo "BIN_NAME_FULL=auditorium-v${{ env.VERSION }}-linux-amd64" >> $GITHUB_ENV;
+          echo "BIN_NAME_MINIMAL=auditorium-minimal-v${{ env.VERSION }}-linux-amd64" >> $GITHUB_ENV
+
+      - name: Build Binary Full
+        id: build_binary_full
+        run: cargo build --release --features "mpris, art"
+
+      - name: Rename Binary Full
+        id: rename_binary_full
+        run: |
+          mv target/release/auditorium target/release/${{ env.BIN_NAME_FULL }};
+          
+      - name: Build Binary Minimal
+        id: build_minimal
+        run: cargo build --release
+
+      - name: Rename Binary Minimal
+        id: rename_binary_minimal
+        run: |
+          mv target/release/auditorium target/release/${{ env.BIN_NAME_MINIMAL }}
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION}}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload binaries
+        id: upload_binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/${{ env.BIN_NAME_FULL }},
+            target/release/${{ env.BIN_NAME_MINIMAL }}
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

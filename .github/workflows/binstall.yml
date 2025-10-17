@@ -24,15 +24,15 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest  
-          name: ${{ github.event.repository.name }} - ${{ env.version }}
+          tag_name: ${{ env.version }}
+          name: ${{ env.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload binaries
         uses: softprops/action-gh-release@v2
         with:
           files: target/release/auditorium
-          tag_name: latest  
-          name: ${{ github.event.repository.name }} - ${{ env.version }}
+          tag_name: ${{ env.version }}
+          name: ${{ env.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
