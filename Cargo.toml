@@ -35,3 +35,10 @@ default = []
 mpris = ["mpris-server", "smol"]
 art = ["ratatui-image", "image"]
 
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/latest/{ name }"  
+bin-dir = "{ name } - { version}/{ bin }{ binary-ext }"  
+pkg-fmt = "tar.gz" 
+disabled-strategies = ["quick-install", "compile"]
+
