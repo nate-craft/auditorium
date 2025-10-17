@@ -1,6 +1,6 @@
 [package]
 name = "auditorium"
-version = "1.2.3"
+version = "1.2.4"
 edition = "2024"
 authors = ["Nate Craft"]
 keywords = ["music", "CLI", "TUI", "cross-platform", "player"]
