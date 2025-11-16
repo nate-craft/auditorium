@@ -1,66 +1,116 @@
-name: Publish
+name: Build
 on:
   push:
     branches:
       - main
+permissions:
+  contents: write
+
 jobs:
-  Publish:
+  release:
     runs-on: ubuntu-latest
-    container:
-      image: rust:latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Release
+        run: gh release create "$(grep '^version =' Cargo.toml | cut -d' ' -f3 | tr -d '\"')" || echo "Release failed, continuing..."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish
         run: cargo publish --allow-dirty || echo "Cargo publish failed, continuing..."
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
 
-      - name: Get Version
-        id: get_version
+  build:
+    runs-on: ${{ matrix.runner }}
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-amd64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            command: cargo
+          - name: linux-arm64
+            runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            command: cross
+          - name: macos-amd64
+            runner: macos-latest
+            target: x86_64-apple-darwin
+            command: cargo
+          - name: macos-arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            command: cargo
+          - name: win-amd64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            command: cross
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Version
+        shell: bash
         run: echo "VERSION=$(grep '^version =' Cargo.toml | cut -d' ' -f3 | tr -d '\"')" >> $GITHUB_ENV
-
-      - name: Define Binary Name
-        id: define_binary
+  
+      - name: Install Cross
+        shell: bash
+        if: matrix.command == 'cross'
         run: |
-          echo "BIN_NAME_FULL=auditorium-v${{ env.VERSION }}-linux-amd64" >> $GITHUB_ENV;
-          echo "BIN_NAME_MINIMAL=auditorium-minimal-v${{ env.VERSION }}-linux-amd64" >> $GITHUB_ENV
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall --no-confirm cross
 
+      - name: MacOS Target
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: rustup target add x86_64-apple-darwin
+ 
       - name: Build Binary Full
-        id: build_binary_full
-        run: cargo build --release --features "mpris, art"
+        run: ${{ matrix.command }} build --release --target ${{ matrix.target }} --features "mpris, art"
 
-      - name: Rename Binary Full
-        id: rename_binary_full
+      - name: Name Binary Full
+        shell: bash
         run: |
-          mv target/release/auditorium target/release/${{ env.BIN_NAME_FULL }};
-          
+          if [[ "${{ matrix.target }}" =~ "-pc-windows-" ]]; then
+            SUFFIX=".exe"
+          else
+            SUFFIX=""
+          fi
+          DIR="target/${{ matrix.target }}/release"
+          BIN_NAME_FULL="auditorium-${VERSION}-${{ matrix.target }}${SUFFIX}"
+          mv "${DIR}/auditorium" "${DIR}/${BIN_NAME_FULL}"
+          echo "BIN_NAME=${BIN_NAME_FULL}" >> $GITHUB_ENV
+
       - name: Build Binary Minimal
-        id: build_minimal
-        run: cargo build --release
+        run: ${{ matrix.command }} build --release --target ${{ matrix.target }}
 
-      - name: Rename Binary Minimal
-        id: rename_binary_minimal
+      - name: Name Binary Minimal
+        shell: bash
         run: |
-          mv target/release/auditorium target/release/${{ env.BIN_NAME_MINIMAL }}
-
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.VERSION }}
-          name: ${{ env.VERSION}}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          if [[ "${{ matrix.target }}" =~ "-pc-windows-" ]]; then
+            SUFFIX=".exe"
+          else
+            SUFFIX=""
+          fi
+          DIR="target/${{ matrix.target }}/release"
+          BIN_NAME_MINIMAL="auditorium-minimal-${VERSION}-${{ matrix.target }}${SUFFIX}"
+          mv "${DIR}/auditorium" "${DIR}/${BIN_NAME_MINIMAL}"
+          echo "BIN_NAME_MINIMAL=${BIN_NAME_MINIMAL}" >> $GITHUB_ENV
+          
       - name: Upload binaries
-        id: upload_binaries
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/release/${{ env.BIN_NAME_FULL }},
-            target/release/${{ env.BIN_NAME_MINIMAL }}
+            target/${{ matrix.target }}/release/${{ env.BIN_NAME_FULL }}
+            target/${{ matrix.target }}/release/${{ env.BIN_NAME_MINIMAL }}
           tag_name: ${{ env.VERSION }}
           name: ${{ env.VERSION }}
         env:
