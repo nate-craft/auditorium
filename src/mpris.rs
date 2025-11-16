@@ -1,5 +1,4 @@
 #[cfg(feature = "mpris")]
-#[cfg(not(target_os = "windows"))]
 pub mod mpris {
     use crate::app::App;
     use crate::app::Message;
