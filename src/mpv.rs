@@ -1,12 +1,11 @@
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader, Write},
-    os::unix::net::UnixStream,
 };
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::{utilities::progress_formatted, MPV_SOCKET};
+use crate::{MPV_SOCKET, utilities::progress_formatted};
 
 pub enum MpvCommand {
     TogglePause(bool),
@@ -21,6 +20,19 @@ pub enum MpvCommandFeedback {
     Int(i32),
 }
 
+#[cfg(target_os = "windows")]
+impl MpvCommand {
+    pub fn run(&self) -> Result<MpvCommandFeedback, std::io::Error> {
+        match self {
+            MpvCommand::TogglePause(_) => MpvCommandFeedback::Void,
+            MpvCommand::GetProgress => MpvCommandFeedback::String("Not Supported"),
+            MpvCommand::GetPosition => MpvCommandFeedback::Int(0),
+            MpvCommand::Seek(_) => MpvCommandFeedback::Void,
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
 impl MpvCommand {
     /// See: https://mpv.io/manual/stable/#list-of-input-commands
     pub fn run(&self) -> Result<MpvCommandFeedback, std::io::Error> {
@@ -81,7 +93,8 @@ impl MpvCommand {
         }
     }
 
-    pub fn read_from_ipc(command: &str) -> Result<String, std::io::Error> {
+    fn read_from_ipc(command: &str) -> Result<String, std::io::Error> {
+        use std::os::unix::net::UnixStream;
         let mut stream = UnixStream::connect(MPV_SOCKET)?;
         stream.write_all(command.as_bytes())?;
         stream.write_all(b"\n")?;
@@ -93,7 +106,8 @@ impl MpvCommand {
         Ok(input)
     }
 
-    pub fn send_to_ipc(command: &str) -> Result<(), std::io::Error> {
+    fn send_to_ipc(command: &str) -> Result<(), std::io::Error> {
+        use std::os::unix::net::UnixStream;
         let mut stream = UnixStream::connect(MPV_SOCKET)?;
         stream.write_all(command.as_bytes())?;
         stream.write_all(b"\n")

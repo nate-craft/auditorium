@@ -1,4 +1,4 @@
-use clap::{Parser, arg, command};
+use clap::Parser;
 use color_eyre::{Result, eyre::Error};
 use crossterm::ExecutableCommand;
 use ratatui::{Terminal, prelude::CrosstermBackend};
@@ -20,6 +20,7 @@ mod app;
 mod files;
 mod input;
 #[cfg(feature = "mpris")]
+#[cfg(not(target_os = "windows"))]
 mod mpris;
 mod mpv;
 mod songs;
@@ -63,6 +64,7 @@ fn main() -> Result<()> {
 }
 
 #[cfg(feature = "mpris")]
+#[cfg(not(target_os = "windows"))]
 fn threads(
     app: Arc<Mutex<App>>,
     terminal: Terminal<CrosstermBackend<Stdout>>,

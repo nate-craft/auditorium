@@ -24,6 +24,7 @@
 - [x] Add MPRIS functionality
 - [x] Refactor main error handling loop to accumulate errors
 - [x] Arch PKGBUILD automation
+- [ ] Add windows MPV communication to allow for keyboard shortcuts
 - [ ] Add album view with hot key for pane switching with library
 - [ ] Add player mode that shows just the album art, song desc, and lyrics
 - [ ] Add in playlist support for `-p|--playlist`

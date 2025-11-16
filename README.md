@@ -62,6 +62,9 @@ paru -Syu auditorium-minimal
 
 Auditorium requires [mpv](https://mpv.io/) and [ffmpeg](https://ffmpeg.org/index.html?) to be installed.
 
+> Note: Using WSL on Windows is highly recommended as MPV socket communication is
+>       not available on Windows thus many keybinds will not function correctly
+
 ___
 
 ## Key Binds
