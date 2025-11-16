@@ -20,7 +20,6 @@ mod app;
 mod files;
 mod input;
 #[cfg(feature = "mpris")]
-#[cfg(not(target_os = "windows"))]
 mod mpris;
 mod mpv;
 mod songs;
@@ -64,7 +63,6 @@ fn main() -> Result<()> {
 }
 
 #[cfg(feature = "mpris")]
-#[cfg(not(target_os = "windows"))]
 fn threads(
     app: Arc<Mutex<App>>,
     terminal: Terminal<CrosstermBackend<Stdout>>,

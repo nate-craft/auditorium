@@ -24,10 +24,10 @@ pub enum MpvCommandFeedback {
 impl MpvCommand {
     pub fn run(&self) -> Result<MpvCommandFeedback, std::io::Error> {
         match self {
-            MpvCommand::TogglePause(_) => MpvCommandFeedback::Void,
-            MpvCommand::GetProgress => MpvCommandFeedback::String("Not Supported"),
-            MpvCommand::GetPosition => MpvCommandFeedback::Int(0),
-            MpvCommand::Seek(_) => MpvCommandFeedback::Void,
+            MpvCommand::TogglePause(_) => Ok(MpvCommandFeedback::Void),
+            MpvCommand::GetProgress => Ok(MpvCommandFeedback::String("Not Supported".to_string())),
+            MpvCommand::GetPosition => Ok(MpvCommandFeedback::Int(0)),
+            MpvCommand::Seek(_) => Ok(MpvCommandFeedback::Void),
         }
     }
 }
