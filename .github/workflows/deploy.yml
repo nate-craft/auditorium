@@ -87,7 +87,7 @@ jobs:
           DIR="target/${{ matrix.target }}/release"
           BIN_NAME_FULL="auditorium-${VERSION}-${{ matrix.target }}${SUFFIX}"
           mv "${DIR}/auditorium" "${DIR}/${BIN_NAME_FULL}"
-          echo "BIN_NAME=${BIN_NAME_FULL}" >> $GITHUB_ENV
+          echo "BIN_NAME_FULL=${BIN_NAME_FULL}" >> $GITHUB_ENV
 
       - name: Build Binary Minimal
         run: ${{ matrix.command }} build --release --target ${{ matrix.target }}
