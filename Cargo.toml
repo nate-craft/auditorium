@@ -1,10 +1,10 @@
 [package]
 name = "auditorium"
-version = "1.2.5"
+version = "1.2.6"
 edition = "2024"
 authors = ["Nate Craft"]
 keywords = ["music", "CLI", "TUI", "cross-platform", "player"]
-license = "MIT"
+license = "GLP-2.0"
 description = "Auditorium is a cross-platform, local, simple, fast, and distraction free CLI application to listen to your music library"
 readme = "README.md"
 homepage = "https://github.com/nate-craft/auditorium"
